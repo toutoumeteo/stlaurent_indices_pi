@@ -23,11 +23,14 @@ include(${wxWidgets_USE_FILE})
 
 # ---------------------------------------------------------------------------
 # ecCodes
-#   Priorité 1 : find_package CONFIG (vcpkg sur Windows, certaines installs Linux)
-#   Priorité 2 : pkg-config (Linux apt, Homebrew)
+#   Windows (vcpkg) : find_package CONFIG
+#   Linux / macOS   : pkg-config
+#   (Le cmake-config livré avec libeccodes-dev sur Ubuntu 22.04 est cassé —
+#    il référence /usr/bin/codes_info absent → on évite find_package sur Unix)
 # ---------------------------------------------------------------------------
-find_package(eccodes QUIET CONFIG)
-if(NOT eccodes_FOUND)
+if(WIN32)
+    find_package(eccodes REQUIRED CONFIG)
+else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(ECCODES REQUIRED eccodes)
 endif()
@@ -45,7 +48,7 @@ add_library(stlaurent_indices_pi SHARED ${SOURCES})
 target_include_directories(stlaurent_indices_pi PRIVATE src/)
 
 # ecCodes — deux chemins selon la méthode de détection
-if(eccodes_FOUND)
+if(WIN32)
     target_link_libraries(stlaurent_indices_pi PRIVATE eccodes)
 else()
     target_include_directories(stlaurent_indices_pi PRIVATE ${ECCODES_INCLUDE_DIRS})
