@@ -40,14 +40,25 @@ jobs:
         run: brew install wxwidgets eccodes
 
       # -----------------------------------------------------------------------
-      # Dépendances Windows — vcpkg (pré-installé sur les runners GitHub)
+      # Dépendances Windows — vcpkg avec cache binaire GitHub Actions
+      # Premier run : ~45 min (compilation depuis les sources)
+      # Runs suivants : ~2 min (restauration du cache)
       # -----------------------------------------------------------------------
+      - name: Activer le cache binaire vcpkg (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
       - name: Dépendances (Windows)
         if: runner.os == 'Windows'
         run: |
           vcpkg install wxwidgets:x64-windows eccodes:x64-windows
         env:
           VCPKG_DEFAULT_TRIPLET: x64-windows
+          VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
       # -----------------------------------------------------------------------
       # Configuration CMake
