@@ -1,0 +1,12 @@
+# Binaires compilés
+*.so
+*.o
+*.a
+
+# Exécutables de test
+test_reader
+
+# Répertoire de build CMake
+build/
+ocpn_plugin.h
+cmake/
