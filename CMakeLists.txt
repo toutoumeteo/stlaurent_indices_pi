@@ -73,3 +73,16 @@ target_link_libraries(stlaurent_indices_pi PRIVATE ${wxWidgets_LIBRARIES})
 if(WIN32)
     set_target_properties(stlaurent_indices_pi PROPERTIES PREFIX "")
 endif()
+
+# macOS : deux ajustements nécessaires
+if(APPLE)
+    # 1. Silence les warnings de dépréciation OpenGL (deprecated depuis 10.14,
+    #    mais toujours fonctionnel — c'est OpenCPN qui gère le contexte GL)
+    target_compile_definitions(stlaurent_indices_pi PRIVATE GL_SILENCE_DEPRECATION)
+
+    # 2. Les symboles OpenCPN (GetCanvasPixLL, opencpn_plugin_116, …) sont
+    #    fournis par l'exécutable hôte au chargement du plugin.
+    #    Sur Linux c'est le comportement par défaut ; sur macOS il faut
+    #    l'autoriser explicitement.
+    target_link_options(stlaurent_indices_pi PRIVATE -undefined dynamic_lookup)
+endif()
