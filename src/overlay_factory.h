@@ -16,6 +16,14 @@
   #include <GL/gl.h>
 #endif
 
+// Constantes GL 1.2+ absentes du gl.h Windows (qui ne couvre que GL 1.1)
+#ifndef GL_CLAMP_TO_EDGE
+  #define GL_CLAMP_TO_EDGE 0x812F
+#endif
+#ifndef GL_CURRENT_PROGRAM
+  #define GL_CURRENT_PROGRAM 0x8B8D
+#endif
+
 class OverlayFactory {
 public:
     OverlayFactory();
