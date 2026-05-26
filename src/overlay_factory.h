@@ -7,10 +7,14 @@
 #include "indices_data.h"
 #include "ocpn_plugin.h"
 
-#ifdef __WXMSW__
-  #include <windows.h>
+#ifdef __APPLE__
+  #include <OpenGL/gl.h>     // macOS : framework OpenGL
+#else
+  #ifdef _WIN32
+    #include <windows.h>     // Windows : requis avant gl.h
+  #endif
+  #include <GL/gl.h>
 #endif
-#include <GL/gl.h>
 
 class OverlayFactory {
 public:

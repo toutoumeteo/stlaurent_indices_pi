@@ -10,3 +10,4 @@ test_reader
 build/
 ocpn_plugin.h
 cmake/
+build/

@@ -10,10 +10,22 @@
 #include <cstring>
 #include <cstdio>
 #include <ctime>
-#include <regex>
+#include <filesystem>   // C++17 — remplace dirent.h (cross-platform)
 #include <stdexcept>
-#include <sys/types.h>
-#include <dirent.h>   // POSIX — sur Windows: à remplacer par FindFirstFile
+
+namespace fs = std::filesystem;
+
+// ---------------------------------------------------------------------------
+// timegm : interprète struct tm comme UTC et retourne time_t
+//   POSIX/Linux : timegm() disponible
+//   Windows     : _mkgmtime() (même sémantique)
+//   macOS       : timegm() disponible (BSD extension)
+// ---------------------------------------------------------------------------
+#ifdef _WIN32
+    static time_t portable_timegm(struct tm* t) { return _mkgmtime(t); }
+#else
+    static time_t portable_timegm(struct tm* t) { return timegm(t); }
+#endif
 
 // ---------------------------------------------------------------------------
 // Interface principale
@@ -84,58 +96,43 @@ bool GribReader::LoadIndex(
 
 // ---------------------------------------------------------------------------
 // Construction du sous-répertoire
-// Cherche le premier répertoire contenant shortName dans runDir
-// ex: runDir="data/2026052518/", shortName="AGITIDX"
+// Cherche le premier répertoire dont le nom contient shortName dans runDir
+// ex: runDir="data/2026052518/", shortName="Indice_agitation"
 //     → "data/2026052518/Indice_agitation_RDWPS/"
 // ---------------------------------------------------------------------------
 std::string GribReader::buildSubDir(
     const std::string& runDir,
     const std::string& shortName
 ) {
-    DIR* d = opendir(runDir.c_str());
-    if (!d) return runDir + shortName + "/";
-
-    struct dirent* entry;
-    while ((entry = readdir(d)) != nullptr) {
-        if (entry->d_type != DT_DIR && entry->d_type != DT_UNKNOWN) continue;
-        std::string name = entry->d_name;
-        if (name == "." || name == "..") continue;
-        if (name.find(shortName) != std::string::npos) {
-            closedir(d);
-            return runDir + "/" + name + "/";
-        }
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(runDir, ec)) {
+        if (!entry.is_directory(ec)) continue;
+        std::string name = entry.path().filename().string();
+        if (name.find(shortName) != std::string::npos)
+            return entry.path().string() + "/";
     }
-    closedir(d);
-
     // Fallback: convention directe
     return runDir + "/" + shortName + "/";
 }
 
 // ---------------------------------------------------------------------------
-// Liste des fichiers .grib2 d'un répertoire, triés par nom
+// Liste des fichiers .grib2 / .grb2 d'un répertoire, triés par nom
 // ---------------------------------------------------------------------------
 std::vector<std::string> GribReader::listGribFiles(
     const std::string& dir,
     std::string&       errMsg
 ) {
     std::vector<std::string> result;
-    DIR* d = opendir(dir.c_str());
-    if (!d) {
+    std::error_code ec;
+    for (const auto& entry : fs::directory_iterator(dir, ec)) {
+        if (!entry.is_regular_file(ec)) continue;
+        std::string ext = entry.path().extension().string();
+        if (ext == ".grib2" || ext == ".grb2")
+            result.push_back(entry.path().string());
+    }
+    if (ec) {
         errMsg = "Répertoire introuvable: " + dir;
-        return result;
     }
-
-    struct dirent* entry;
-    while ((entry = readdir(d)) != nullptr) {
-        std::string name = entry->d_name;
-        if (name.size() > 6 &&
-            (name.substr(name.size()-6) == ".grib2" ||
-             name.substr(name.size()-4) == ".grb2")) {
-            result.push_back(dir + name);
-        }
-    }
-    closedir(d);
-
     std::sort(result.begin(), result.end());
     return result;
 }
@@ -234,7 +231,7 @@ bool GribReader::ReadOneFile(
     refTm.tm_min  = (int)(dataTime % 100);
     refTm.tm_sec  = 0;
     refTm.tm_isdst = 0;
-    time_t refTime = timegm(&refTm);  // timegm = UTC (POSIX), mktime = local
+    time_t refTime = portable_timegm(&refTm);
 
     outStep.refTime   = refTime;
     outStep.stepHours = (int)stepHours;

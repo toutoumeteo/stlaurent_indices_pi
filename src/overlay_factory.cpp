@@ -9,17 +9,39 @@
 #include <vector>
 #include <algorithm>
 
-// glUseProgram est GL2+ — on le charge dynamiquement pour éviter
-// de lier contre libGL2 explicitement
-#include <dlfcn.h>
+// ---------------------------------------------------------------------------
+// Chargement dynamique de glUseProgram (GL2+)
+// OpenCPN 5.x a un shader actif → on doit le désactiver avant le rendu
+// fixed-function, puis le restaurer.
+// On charge glUseProgram dynamiquement pour ne pas lier explicitement
+// contre une lib GL2 qui peut ne pas exister sur toutes les plateformes.
+// ---------------------------------------------------------------------------
+#ifdef _WIN32
+  // Windows : wglGetProcAddress, avec fallback sur opengl32.dll
+  static void* getGLProc(const char* name) {
+      void* p = (void*)wglGetProcAddress(name);
+      if (!p) {
+          // Certains pilotes anciens exposent glUseProgram dans opengl32.dll
+          HMODULE mod = GetModuleHandleA("opengl32.dll");
+          if (mod) p = (void*)GetProcAddress(mod, name);
+      }
+      return p;
+  }
+#else
+  // Linux / macOS : dlsym sur le processus courant
+  #include <dlfcn.h>
+  static void* getGLProc(const char* name) {
+      return dlsym(RTLD_DEFAULT, name);
+  }
+#endif
+
 typedef void (*PFNGLUSEPROGRAMPROC)(GLuint program);
 static PFNGLUSEPROGRAMPROC s_glUseProgram = nullptr;
 static bool s_glUseProgramLoaded = false;
 
 static void ensureGLUseProgram() {
     if (!s_glUseProgramLoaded) {
-        s_glUseProgram = (PFNGLUSEPROGRAMPROC)
-            dlsym(RTLD_DEFAULT, "glUseProgram");
+        s_glUseProgram = (PFNGLUSEPROGRAMPROC)getGLProc("glUseProgram");
         s_glUseProgramLoaded = true;
     }
 }
