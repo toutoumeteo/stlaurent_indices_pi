@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
+          - os: ubuntu-24.04
             artifact_path: build/libstlaurent_indices_pi.so
           - os: macos-latest
             artifact_path: build/libstlaurent_indices_pi.dylib
@@ -30,7 +30,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libwxgtk3.2-dev libeccodes-dev
+          sudo apt-get install -y libwxgtk3.2-dev libeccodes-dev libgl-dev
 
       # -----------------------------------------------------------------------
       # Dépendances macOS
