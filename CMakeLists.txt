@@ -25,10 +25,16 @@ if(WIN32)
 endif()
 
 # ---------------------------------------------------------------------------
-# wxWidgets
+# wxWidgets — find_package pour les headers ; le lien est géré plus bas.
+#   On ne lie PAS wxWidgets sur macOS et Linux.
+#   Sur ces plateformes, OpenCPN embarque déjà wxWidgets dans son processus ;
+#   lier contre une version Homebrew/système DIFFÉRENTE créerait deux runtimes
+#   wx simultanés → échec de dlopen ou crash.
+#   Les symboles wx sont résolus automatiquement depuis OpenCPN à l'exécution
+#   (Linux : comportement par défaut du chargeur ; macOS : -undefined dynamic_lookup).
+#   Sur Windows : on lie explicitement (MSVC n'a pas de résolution dynamique).
 # ---------------------------------------------------------------------------
 find_package(wxWidgets REQUIRED COMPONENTS core base)
-include(${wxWidgets_USE_FILE})
 
 # ---------------------------------------------------------------------------
 # ecCodes
@@ -56,6 +62,16 @@ add_library(stlaurent_indices_pi SHARED ${SOURCES})
 
 target_include_directories(stlaurent_indices_pi PRIVATE src/)
 
+# wxWidgets — headers et définitions de compilation (sans lien sur Unix)
+target_include_directories(stlaurent_indices_pi PRIVATE ${wxWidgets_INCLUDE_DIRS})
+foreach(_def ${wxWidgets_DEFINITIONS})
+    target_compile_definitions(stlaurent_indices_pi PRIVATE ${_def})
+endforeach()
+if(wxWidgets_CXX_FLAGS)
+    separate_arguments(_wx_cxx_flags UNIX_COMMAND "${wxWidgets_CXX_FLAGS}")
+    target_compile_options(stlaurent_indices_pi PRIVATE ${_wx_cxx_flags})
+endif()
+
 # ecCodes — deux chemins selon la méthode de détection
 if(WIN32)
     target_link_libraries(stlaurent_indices_pi PRIVATE eccodes)
@@ -73,8 +89,10 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(stlaurent_indices_pi PRIVATE dl)
 endif()
 
-# wxWidgets
-target_link_libraries(stlaurent_indices_pi PRIVATE ${wxWidgets_LIBRARIES})
+# wxWidgets — lien uniquement sur Windows (voir commentaire find_package ci-dessus)
+if(WIN32)
+    target_link_libraries(stlaurent_indices_pi PRIVATE ${wxWidgets_LIBRARIES})
+endif()
 
 # ---------------------------------------------------------------------------
 # Nom du fichier de sortie
