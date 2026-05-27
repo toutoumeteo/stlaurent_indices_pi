@@ -1,0 +1,8 @@
+; Module definition file — Windows only
+; Exporte les deux points d'entrée requis par OpenCPN pour charger le plugin.
+; Utilisé quand DECL_EXP est défini comme vide (évite l'explosion de dllexport
+; sur toutes les classes de ocpn_plugin.h).
+LIBRARY stlaurent_indices_pi
+EXPORTS
+    create_pi
+    destroy_pi

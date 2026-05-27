@@ -15,6 +15,15 @@ set(SOURCES
     src/ui_dialog.cpp
 )
 
+# Sur Windows, MSVC exige que tous les symboles soient résolus à la
+# compilation. Sans opencpn.lib, on fournit :
+#   - des stubs pour les virtuelles des classes de base (vtable)
+#   - des stubs pour les fonctions C de l'API OpenCPN appelées par notre code
+# Le fichier .def exporte create_pi/destroy_pi (DECL_EXP étant vidé).
+if(WIN32)
+    list(APPEND SOURCES src/ocpn_plugin_stubs_win.cpp)
+endif()
+
 # ---------------------------------------------------------------------------
 # wxWidgets
 # ---------------------------------------------------------------------------
@@ -75,6 +84,20 @@ target_link_libraries(stlaurent_indices_pi PRIVATE ${wxWidgets_LIBRARIES})
 # ---------------------------------------------------------------------------
 if(WIN32)
     set_target_properties(stlaurent_indices_pi PROPERTIES PREFIX "")
+
+    # Redéfinir DECL_EXP comme vide pour notre DLL :
+    #   Dans ocpn_plugin.h, DECL_EXP vaut __declspec(dllexport) sur Windows,
+    #   ce qui force MSVC à instancier et exporter les vtables de TOUTES les
+    #   classes marquées (PlugInChartBase, OCPN_downloadEvent, …), même celles
+    #   qu'on n'utilise pas → 127 LNK2019. En vidant DECL_EXP, seules les
+    #   classes dont stlaurent_pi hérite réellement ont besoin d'implémentations
+    #   (fournies par ocpn_plugin_stubs_win.cpp).
+    #   create_pi et destroy_pi sont exportés via le fichier .def ci-dessous.
+    target_compile_definitions(stlaurent_indices_pi PRIVATE "DECL_EXP=")
+
+    # Fichier .def : liste explicite des exports du plugin
+    target_sources(stlaurent_indices_pi PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/stlaurent_indices_pi.def)
 endif()
 
 # macOS : deux ajustements nécessaires
