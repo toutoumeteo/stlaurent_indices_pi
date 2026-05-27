@@ -76,17 +76,31 @@ endif()
 # ---------------------------------------------------------------------------
 # ecCodes
 #   Windows (vcpkg) : find_package CONFIG
-#   Linux / macOS   : pkg-config
-#   (Le cmake-config livré avec libeccodes-dev sur Ubuntu 22.04 est cassé —
-#    il référence /usr/bin/codes_info absent → on évite find_package sur Unix)
+#   Linux / macOS   : find_path + find_library
+#   (pkg-config évité : le .pc eccodes sur Ubuntu 22.04 contient un
+#    includedir relatif cassé → IMPORTED_TARGET échoue à la validation.
+#    find_library passe le chemin absolu à l'éditeur de liens → pas besoin
+#    de -L séparé, fonctionne aussi bien sur macOS Homebrew que sur Linux.)
 # ---------------------------------------------------------------------------
 if(WIN32)
     find_package(eccodes REQUIRED CONFIG)
 else()
-    find_package(PkgConfig REQUIRED)
-    # IMPORTED_TARGET crée la cible PkgConfig::ECCODES avec includes + lib dirs
-    # + libs — évite le problème de -leccodes sans -L/opt/homebrew/lib sur macOS
-    pkg_check_modules(ECCODES REQUIRED IMPORTED_TARGET eccodes)
+    find_path(ECCODES_INCLUDE_DIR eccodes.h
+        HINTS /opt/homebrew/include /usr/include /usr/local/include
+        PATH_SUFFIXES eccodes x86_64-linux-gnu)
+    find_library(ECCODES_LIBRARY NAMES eccodes
+        HINTS /opt/homebrew/lib /usr/lib /usr/local/lib
+              /usr/lib/x86_64-linux-gnu)
+    if(NOT ECCODES_INCLUDE_DIR OR NOT ECCODES_LIBRARY)
+        message(FATAL_ERROR
+            "eccodes introuvable.\n"
+            "  macOS  : brew install eccodes\n"
+            "  Ubuntu : sudo apt install libeccodes-dev\n"
+            "Passez le chemin manuellement si nécessaire :\n"
+            "  -DECCODES_INCLUDE_DIR=<path> -DECCODES_LIBRARY=<path>\n")
+    endif()
+    message(STATUS "ecCodes headers : ${ECCODES_INCLUDE_DIR}")
+    message(STATUS "ecCodes library : ${ECCODES_LIBRARY}")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -111,12 +125,12 @@ if(wxWidgets_CXX_FLAGS)
     target_compile_options(stlaurent_indices_pi PRIVATE ${_wx_cxx_flags})
 endif()
 
-# ecCodes — deux chemins selon la méthode de détection
+# ecCodes — lien
 if(WIN32)
     target_link_libraries(stlaurent_indices_pi PRIVATE eccodes)
 else()
-    # PkgConfig::ECCODES contient includes + -L/chemin/homebrew + -leccodes
-    target_link_libraries(stlaurent_indices_pi PRIVATE PkgConfig::ECCODES)
+    target_include_directories(stlaurent_indices_pi PRIVATE ${ECCODES_INCLUDE_DIR})
+    target_link_libraries(stlaurent_indices_pi PRIVATE ${ECCODES_LIBRARY})
 endif()
 
 # OpenGL
