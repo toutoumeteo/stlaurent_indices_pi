@@ -119,15 +119,41 @@ if(WIN32)
         ${CMAKE_CURRENT_SOURCE_DIR}/stlaurent_indices_pi.def)
 endif()
 
-# macOS : deux ajustements nécessaires
+# macOS
 if(APPLE)
-    # 1. Silence les warnings de dépréciation OpenGL (deprecated depuis 10.14,
-    #    mais toujours fonctionnel — c'est OpenCPN qui gère le contexte GL)
+    # 1. Silence les warnings de dépréciation OpenGL
     target_compile_definitions(stlaurent_indices_pi PRIVATE GL_SILENCE_DEPRECATION)
 
-    # 2. Les symboles OpenCPN (GetCanvasPixLL, opencpn_plugin_116, …) sont
-    #    fournis par l'exécutable hôte au chargement du plugin.
-    #    Sur Linux c'est le comportement par défaut ; sur macOS il faut
-    #    l'autoriser explicitement.
+    # 2. wxWidgets : lier contre le bundle OpenCPN installé
+    #    Un plugin OpenCPN DOIT utiliser la MÊME wxWidgets qu'OpenCPN.
+    #    OpenCPN embarque wx 3.2 dans Contents/Frameworks/ ; lier contre
+    #    ces dylibs garantit que macOS réutilise la bibliothèque déjà chargée
+    #    (même install-name → pas de double chargement, symboles disponibles).
+    #
+    #    Priorité :
+    #      a) OPENCPN_APP cmake variable (override CI/custom install)
+    #      b) /Applications/OpenCPN.app (installation standard)
+    #      c) dynamic_lookup uniquement (CI sans OpenCPN — DLL non chargeable
+    #         en standalone mais se charge correctement depuis OpenCPN)
+    if(NOT DEFINED OPENCPN_APP)
+        set(OPENCPN_APP "/Applications/OpenCPN.app")
+    endif()
+    set(_ocpn_fw "${OPENCPN_APP}/Contents/Frameworks")
+
+    if(EXISTS "${_ocpn_fw}/libwx_osx_cocoau_core-3.2.dylib")
+        message(STATUS "wxWidgets : bundle OpenCPN trouvé → ${_ocpn_fw}")
+        target_link_libraries(stlaurent_indices_pi PRIVATE
+            "${_ocpn_fw}/libwx_osx_cocoau_core-3.2.dylib"
+            "${_ocpn_fw}/libwx_baseu-3.2.dylib"
+        )
+    else()
+        message(WARNING
+            "OpenCPN non trouvé dans ${OPENCPN_APP}.\n"
+            "Lien wxWidgets ignoré — utilisez -DOPENCPN_APP=<chemin> si OpenCPN\n"
+            "est installé ailleurs. Le plugin se chargera depuis OpenCPN mais\n"
+            "ne peut pas être testé hors contexte OpenCPN.")
+    endif()
+
+    # 3. Symboles OpenCPN (GetCanvasPixLL, etc.) résolus depuis l'hôte au chargement
     target_link_options(stlaurent_indices_pi PRIVATE -undefined dynamic_lookup)
 endif()
