@@ -30,6 +30,7 @@ stlaurent_pi::stlaurent_pi(void* ppimgr)
     , m_parent_window(nullptr)
     , m_currentIndex(0)
     , m_currentStep(0)
+    , m_bOverlayVisible(false)
     , m_overlayFactory(std::make_unique<OverlayFactory>())
 {}
 
@@ -128,7 +129,8 @@ void stlaurent_pi::OnToolbarToolCallback(int id) {
     if (m_dialog->IsShown()) {
         m_dialog->Hide();
         SetToolbarItemState(m_toolbar_item_id, false);
-        RequestRefresh();   // Effacer l'overlay immédiatement
+        // Pas de RequestRefresh ici : l'overlay reste visible quand on
+        // ferme le panneau de contrôle (comportement identique à GRIB)
     } else {
         m_dialog->Show();
         SetToolbarItemState(m_toolbar_item_id, true);
@@ -178,6 +180,7 @@ bool stlaurent_pi::LoadRun(const wxString& runDir, wxString& errMsg) {
         return false;
     }
 
+    m_bOverlayVisible = true;  // auto-afficher le premier indice au chargement
     UpdateOverlay();
     RequestRefresh();
     return true;
@@ -216,6 +219,17 @@ void stlaurent_pi::UpdateOverlay() {
     m_overlayFactory->SetData(&data, m_currentStep);
 }
 
+void stlaurent_pi::SetOverlayVisible(bool show) {
+    m_bOverlayVisible = show;
+    if (!show) {
+        // Déconnecter la factory immédiatement pour que le prochain
+        // RenderGL ne dessine rien même avant le redraw
+        m_overlayFactory->SetData(nullptr, 0);
+    } else {
+        UpdateOverlay();
+    }
+}
+
 void stlaurent_pi::RequestRefresh() {
     if (m_parent_window)
         ::RequestRefresh(m_parent_window);
@@ -225,11 +239,9 @@ void stlaurent_pi::RequestRefresh() {
 // Rendu — délégation à l'overlay factory
 // ---------------------------------------------------------------------------
 bool stlaurent_pi::DoRender(PlugIn_ViewPort* vp, bool useGL, wxDC* dc) {
-    if (m_loadedData.empty()) return false;
-    // Ne rendre que si la fenêtre est visible : évite la superposition des
-    // palettes avec d'autres plugins (ex: GRIB) quand l'utilisateur ne
-    // souhaite pas afficher les indices SL.
-    if (!m_dialog || !m_dialog->IsShown()) return false;
+    // Le flag m_bOverlayVisible est contrôlé par les checkboxes du dialog,
+    // indépendamment de l'ouverture/fermeture du panneau de contrôle.
+    if (!m_bOverlayVisible || m_loadedData.empty()) return false;
     if (useGL)
         return m_overlayFactory->RenderGL(vp);
     else if (dc)

@@ -56,6 +56,10 @@ public:
     // Change l'indice affiché (index dans m_loadedData)
     void SetDisplayIndex(int dataIndex);
 
+    // Active / désactive l'overlay indépendamment de la fenêtre de contrôle
+    void SetOverlayVisible(bool show);
+    bool GetOverlayVisible() const { return m_bOverlayVisible; }
+
     // --- Accès en lecture pour le dialog ---
     const std::vector<IndexData>& GetLoadedData()  const { return m_loadedData; }
     int  GetCurrentStep()  const { return m_currentStep; }
@@ -74,9 +78,10 @@ private:
     int                        m_toolbar_item_id;
     wxWindow*                  m_parent_window;
 
-    std::vector<IndexData>     m_loadedData;   // indices chargés
-    int                        m_currentIndex; // indice courant (m_loadedData[m_currentIndex])
-    int                        m_currentStep;  // pas de temps courant
+    std::vector<IndexData>     m_loadedData;    // indices chargés
+    int                        m_currentIndex;  // indice courant (m_loadedData[m_currentIndex])
+    int                        m_currentStep;   // pas de temps courant
+    bool                       m_bOverlayVisible; // contrôle indépendant de la fenêtre
 
     std::unique_ptr<OverlayFactory> m_overlayFactory;
 

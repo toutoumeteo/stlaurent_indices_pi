@@ -18,7 +18,7 @@
 // ---------------------------------------------------------------------------
 wxBEGIN_EVENT_TABLE(StLaurentDialog, wxDialog)
     EVT_BUTTON(wxID_OPEN,       StLaurentDialog::OnOpenRun)
-    EVT_CHOICE(wxID_ANY,        StLaurentDialog::OnIndexChanged)
+    EVT_CHECKBOX(wxID_ANY,      StLaurentDialog::OnCheckboxChanged)
     EVT_SLIDER(wxID_ANY,        StLaurentDialog::OnTimeSlider)
     EVT_CLOSE(                  StLaurentDialog::OnClose)
 wxEND_EVENT_TABLE()
@@ -43,14 +43,14 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
     // --- Séparateur ---
     mainSizer->Add(new wxStaticLine(this), 0, wxEXPAND | wxLEFT | wxRIGHT, 6);
 
-    // --- Choix de l'indice ---
-    row = new wxBoxSizer(wxHORIZONTAL);
-    row->Add(new wxStaticText(this, wxID_ANY, _("Indice :")),
-             0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
-    m_choiceIndex = new wxChoice(this, wxID_ANY);
-    m_choiceIndex->Enable(false);
-    row->Add(m_choiceIndex, 1, wxEXPAND);
-    mainSizer->Add(row, 0, wxALL | wxEXPAND, 6);
+    // --- Zone des indices (remplie dynamiquement par RefreshAfterLoad) ---
+    // Chaque indice chargé apparaît comme une checkbox — cocher un indice
+    // décoche le précédent (comportement radio, identique au plugin GRIB).
+    // Fermer la fenêtre ne masque PAS l'overlay ; seul décocher le fait.
+    wxStaticBoxSizer* indiceBox =
+        new wxStaticBoxSizer(wxVERTICAL, this, _("Indice"));
+    m_checkSizer = indiceBox;
+    mainSizer->Add(indiceBox, 0, wxALL | wxEXPAND, 6);
 
     // --- Curseur de temps ---
     row = new wxBoxSizer(wxHORIZONTAL);
@@ -114,34 +114,48 @@ void StLaurentDialog::OnOpenRun(wxCommandEvent& /*evt*/) {
 }
 
 // ---------------------------------------------------------------------------
-// Mise à jour de l'UI après chargement
+// Mise à jour de l'UI après chargement d'une run
+// Détruit les anciennes checkboxes et en crée une par indice chargé.
+// Le premier indice est auto-sélectionné (comportement GRIB).
 // ---------------------------------------------------------------------------
 void StLaurentDialog::RefreshAfterLoad() {
     const auto& data = m_plugin->GetLoadedData();
     if (data.empty()) return;
 
-    // Remplir le choix des indices
-    m_choiceIndex->Clear();
-    for (const auto& d : data)
-        m_choiceIndex->Append(wxString::FromUTF8(d.def.displayName));
+    // --- Détruire les anciennes checkboxes ---
+    for (wxCheckBox* cb : m_checkboxes) {
+        m_checkSizer->Detach(cb);
+        cb->Destroy();
+    }
+    m_checkboxes.clear();
 
-    int cur = m_plugin->GetCurrentIndex();
-    m_choiceIndex->SetSelection(cur < (int)data.size() ? cur : 0);
-    m_choiceIndex->Enable(true);
+    // --- Créer une checkbox par indice ---
+    for (const auto& d : data) {
+        wxCheckBox* cb = new wxCheckBox(this, wxID_ANY,
+                                         wxString::FromUTF8(d.def.displayName));
+        m_checkSizer->Add(cb, 0, wxALL, 4);
+        m_checkboxes.push_back(cb);
+    }
 
-    // Configurer le curseur de temps
-    int nSteps = (int)data[cur].scalarSteps.size();
-    if (nSteps > 0) {
-        m_sliderTime->SetRange(0, nSteps - 1);
-        m_sliderTime->SetValue(m_plugin->GetCurrentStep());
-        m_sliderTime->Enable(true);
+    // --- Auto-sélectionner le premier indice ---
+    if (!m_checkboxes.empty()) {
+        m_checkboxes[0]->SetValue(true);
+        m_plugin->SetDisplayIndex(0);
+        // m_bOverlayVisible est déjà true (mis par LoadRun)
+
+        int nSteps = (int)data[0].scalarSteps.size();
+        if (nSteps > 0) {
+            m_sliderTime->SetRange(0, nSteps - 1);
+            m_sliderTime->SetValue(m_plugin->GetCurrentStep());
+            m_sliderTime->Enable(true);
+        }
     }
 
     UpdateTimeLabel();
 
     wxString msg;
     msg.Printf(_("%d indice(s) chargé(s), %d pas de temps."),
-               (int)data.size(), nSteps);
+               (int)data.size(), (int)data[0].scalarSteps.size());
     m_lblStatus->SetLabel(msg);
 
     Layout();
@@ -149,22 +163,53 @@ void StLaurentDialog::RefreshAfterLoad() {
 }
 
 // ---------------------------------------------------------------------------
-// Changement d'indice
+// Changement d'état d'une checkbox d'indice
+//   • Cocher  → décocher toutes les autres, afficher cet indice
+//   • Décocher → si aucune n'est cochée, masquer l'overlay
 // ---------------------------------------------------------------------------
-void StLaurentDialog::OnIndexChanged(wxCommandEvent& /*evt*/) {
-    int sel = m_choiceIndex->GetSelection();
-    if (sel < 0) return;
+void StLaurentDialog::OnCheckboxChanged(wxCommandEvent& evt) {
+    wxCheckBox* changed = wxDynamicCast(evt.GetEventObject(), wxCheckBox);
+    if (!changed) return;
 
-    m_plugin->SetDisplayIndex(sel);
+    if (changed->GetValue()) {
+        // Trouver l'index de la checkbox cochée et décocher les autres
+        int newIndex = -1;
+        for (int i = 0; i < (int)m_checkboxes.size(); ++i) {
+            if (m_checkboxes[i] == changed) {
+                newIndex = i;
+            } else {
+                m_checkboxes[i]->SetValue(false);
+            }
+        }
+        if (newIndex < 0) return;
 
-    // Ajuster le curseur au nouveau nombre de pas de temps
-    const auto& data = m_plugin->GetLoadedData();
-    if (sel < (int)data.size()) {
-        int nSteps = (int)data[sel].scalarSteps.size();
-        m_sliderTime->SetRange(0, nSteps - 1);
-        m_sliderTime->SetValue(0);
+        m_plugin->SetDisplayIndex(newIndex);
+        m_plugin->SetOverlayVisible(true);
+
+        // Adapter le curseur au nombre de pas de temps du nouvel indice
+        const auto& data = m_plugin->GetLoadedData();
+        if (newIndex < (int)data.size()) {
+            int nSteps = (int)data[newIndex].scalarSteps.size();
+            m_sliderTime->SetRange(0, nSteps - 1);
+            m_sliderTime->SetValue(0);
+            m_sliderTime->Enable(nSteps > 0);
+        }
+
+    } else {
+        // Vérifier si au moins une checkbox reste cochée
+        bool anyChecked = false;
+        for (auto* cb : m_checkboxes)
+            anyChecked = anyChecked || cb->GetValue();
+
+        if (!anyChecked) {
+            // Tout est décoché → masquer l'overlay, libère la place pour GRIB
+            m_plugin->SetOverlayVisible(false);
+            m_sliderTime->Enable(false);
+        }
     }
+
     UpdateTimeLabel();
+    m_plugin->RequestRefresh();
 }
 
 // ---------------------------------------------------------------------------
@@ -208,10 +253,9 @@ void StLaurentDialog::UpdateTimeLabel() {
 }
 
 // ---------------------------------------------------------------------------
-// Fermeture du dialog
+// Fermeture du dialog — cache le panneau de contrôle sans toucher à l'overlay
 // ---------------------------------------------------------------------------
 void StLaurentDialog::OnClose(wxCloseEvent& /*evt*/) {
-    Hide();  // Ne pas détruire — juste cacher
-    // Forcer un redraw immédiat pour effacer l'overlay de la carte
-    m_plugin->RequestRefresh();
+    Hide();  // Ne pas détruire — juste cacher le panneau de contrôle
+             // L'overlay reste affiché si une checkbox était cochée
 }
