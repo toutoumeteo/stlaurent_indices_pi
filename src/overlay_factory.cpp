@@ -257,6 +257,10 @@ void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
 
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, m_textureId);
+    // Forcer GL_MODULATE pour que glColor4f contrôle l'opacité correctement.
+    // Certains plugins (ex: GRIB) laissent GL_TEXTURE_ENV_MODE à GL_REPLACE ou
+    // GL_DECAL ce qui ignorerait notre couleur et afficherait la texture opaque.
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     glColor4f(1.0f, 1.0f, 1.0f, 0.75f);  // 75% d'opacité
 
     glBegin(GL_QUADS);

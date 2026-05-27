@@ -128,6 +128,7 @@ void stlaurent_pi::OnToolbarToolCallback(int id) {
     if (m_dialog->IsShown()) {
         m_dialog->Hide();
         SetToolbarItemState(m_toolbar_item_id, false);
+        RequestRefresh();   // Effacer l'overlay immédiatement
     } else {
         m_dialog->Show();
         SetToolbarItemState(m_toolbar_item_id, true);

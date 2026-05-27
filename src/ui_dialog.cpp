@@ -212,4 +212,6 @@ void StLaurentDialog::UpdateTimeLabel() {
 // ---------------------------------------------------------------------------
 void StLaurentDialog::OnClose(wxCloseEvent& /*evt*/) {
     Hide();  // Ne pas détruire — juste cacher
+    // Forcer un redraw immédiat pour effacer l'overlay de la carte
+    m_plugin->RequestRefresh();
 }
