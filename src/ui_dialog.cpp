@@ -130,8 +130,11 @@ void StLaurentDialog::RefreshAfterLoad() {
     m_checkboxes.clear();
 
     // --- Créer une checkbox par indice ---
+    // Sur GTK (Linux) et macOS, les enfants d'un wxStaticBoxSizer DOIVENT
+    // avoir le StaticBox comme parent — pas le dialog — sinon ils n'apparaissent pas.
+    wxWindow* cbParent = m_checkSizer->GetStaticBox();
     for (const auto& d : data) {
-        wxCheckBox* cb = new wxCheckBox(this, wxID_ANY,
+        wxCheckBox* cb = new wxCheckBox(cbParent, wxID_ANY,
                                          wxString::FromUTF8(d.def.displayName));
         m_checkSizer->Add(cb, 0, wxALL, 4);
         m_checkboxes.push_back(cb);

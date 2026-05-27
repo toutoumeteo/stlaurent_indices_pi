@@ -24,8 +24,8 @@ private:
     stlaurent_pi* m_plugin;
 
     // Contrôles UI
-    wxButton*      m_btnOpen;      // "Ouvrir run..."
-    wxSizer*       m_checkSizer;   // conteneur des checkboxes (indices)
+    wxButton*           m_btnOpen;      // "Ouvrir run..."
+    wxStaticBoxSizer*   m_checkSizer;   // conteneur des checkboxes (indices)
     wxSlider*      m_sliderTime;   // curseur de temps H+1 → H+48
     wxStaticText*  m_lblTime;      // "H+24 — 2026-05-26T18:00Z"
     wxStaticText*  m_lblStatus;    // barre de statut
