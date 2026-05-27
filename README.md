@@ -112,7 +112,8 @@ Le fichier de configuration se trouve dans `.github/workflows/build.yml`.
 ### Linux
 
 ```bash
-# Copier dans le répertoire de plugins
+# Créer le répertoire si nécessaire, puis copier
+mkdir -p ~/.local/lib/opencpn/
 cp build/libstlaurent_indices_pi.so ~/.local/lib/opencpn/
 ```
 
