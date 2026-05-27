@@ -34,7 +34,44 @@ endif()
 #   (Linux : comportement par défaut du chargeur ; macOS : -undefined dynamic_lookup).
 #   Sur Windows : on lie explicitement (MSVC n'a pas de résolution dynamique).
 # ---------------------------------------------------------------------------
-find_package(wxWidgets REQUIRED COMPONENTS core base)
+
+# Sur macOS (Apple Silicon), Homebrew est dans /opt/homebrew
+# qui n'est pas automatiquement dans les chemins de recherche CMake.
+if(APPLE)
+    list(PREPEND CMAKE_PREFIX_PATH /opt/homebrew)
+endif()
+
+if(WIN32)
+    # Windows : on lie wxWidgets → REQUIRED
+    find_package(wxWidgets REQUIRED COMPONENTS core base)
+else()
+    # macOS / Linux : on doit utiliser wxWidgets 3.2 (même ABI qu'OpenCPN).
+    # OpenCPN embarque wx 3.2 ; compiler avec des headers 3.3 introduit des
+    # symboles absents au chargement (ex. SetCursorBundle → dlopen échoue).
+    #
+    # Homebrew installe wx@3.2 avec wx-config-3.2 (pas wx-config) pour éviter
+    # les conflits avec la formule wxwidgets (3.3+). On cherche wx-config-3.2
+    # en priorité, puis wx-config comme fallback.
+    if(NOT DEFINED wxWidgets_CONFIG_EXECUTABLE)
+        find_program(wxWidgets_CONFIG_EXECUTABLE
+            NAMES wx-config-3.2 wx-config
+            HINTS /opt/homebrew/bin /usr/local/bin /usr/bin
+            NO_DEFAULT_PATH)
+    endif()
+
+    if(wxWidgets_CONFIG_EXECUTABLE)
+        message(STATUS "wxWidgets config : ${wxWidgets_CONFIG_EXECUTABLE}")
+    else()
+        message(FATAL_ERROR
+            "wxWidgets 3.2 introuvable. Les headers 3.2 sont nécessaires (ABI OpenCPN).\n"
+            "  macOS  : brew install wxwidgets@3.2\n"
+            "  Ubuntu : sudo apt install libwxgtk3.2-dev wx-common\n"
+            "Ou passez le chemin explicitement :\n"
+            "  -DwxWidgets_CONFIG_EXECUTABLE=/opt/homebrew/bin/wx-config-3.2\n")
+    endif()
+
+    find_package(wxWidgets REQUIRED COMPONENTS core base)
+endif()
 
 # ---------------------------------------------------------------------------
 # ecCodes
