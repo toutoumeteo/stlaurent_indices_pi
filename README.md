@@ -114,16 +114,32 @@ Le fichier de configuration se trouve dans `.github/workflows/build.yml`.
 ```bash
 # Copier dans le répertoire de plugins
 cp build/libstlaurent_indices_pi.so ~/.local/lib/opencpn/
-
-# Lancer OpenCPN (si le chargement de plugins tiers est bloqué)
-OPENCPN_PLUGIN_DIRS=~/.local/lib/opencpn opencpn
 ```
 
 Vérifier que le plugin est activé dans **Options → Plugins → Indices Saint-Laurent → Activer**.
 
-### macOS / Windows
+### macOS
 
-Copier le `.dylib` / `.dll` dans le répertoire de plugins OpenCPN, puis activer dans **Options → Plugins**.
+Le plugin doit être **compilé localement** (pas depuis l'artefact CI) pour lier contre
+la wxWidgets 3.2 embarquée dans OpenCPN. Voir la section **Compilation locale** ci-dessus.
+
+```bash
+# Répertoire de plugins OpenCPN sur macOS
+mkdir -p ~/Library/Application\ Support/OpenCPN/Contents/PlugIns/
+
+cp build/libstlaurent_indices_pi.dylib \
+   ~/Library/Application\ Support/OpenCPN/Contents/PlugIns/
+
+# Supprimer l'attribut de quarantaine macOS (obligatoire)
+xattr -d com.apple.quarantine \
+   ~/Library/Application\ Support/OpenCPN/Contents/PlugIns/libstlaurent_indices_pi.dylib
+```
+
+Ouvrir OpenCPN normalement, puis activer dans **Options → Plugins**.
+
+### Windows
+
+Copier le `.dll` dans le répertoire de plugins OpenCPN, puis activer dans **Options → Plugins**.
 
 ---
 
