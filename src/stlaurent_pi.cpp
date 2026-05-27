@@ -225,6 +225,10 @@ void stlaurent_pi::RequestRefresh() {
 // ---------------------------------------------------------------------------
 bool stlaurent_pi::DoRender(PlugIn_ViewPort* vp, bool useGL, wxDC* dc) {
     if (m_loadedData.empty()) return false;
+    // Ne rendre que si la fenêtre est visible : évite la superposition des
+    // palettes avec d'autres plugins (ex: GRIB) quand l'utilisateur ne
+    // souhaite pas afficher les indices SL.
+    if (!m_dialog || !m_dialog->IsShown()) return false;
     if (useGL)
         return m_overlayFactory->RenderGL(vp);
     else if (dc)

@@ -124,6 +124,13 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
     glMatrixMode(GL_PROJECTION); glPopMatrix();
     glMatrixMode(GL_MODELVIEW);  glPopMatrix();
     glPopAttrib();
+
+    // Remettre la couleur courante à blanc opaque — glPopAttrib restaure
+    // GL_CURRENT_BIT mais certaines implémentations (pilotes anciens) ne
+    // le font pas fiablement, ce qui peut corrompre la palette d'autres
+    // plugins (ex: GRIB) qui lisent la couleur courante sans la définir.
+    glColor4f(1.0f, 1.0f, 1.0f, 1.0f);
+
     if (saved_program && s_glUseProgram)
         s_glUseProgram(saved_program);
 
