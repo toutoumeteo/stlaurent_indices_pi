@@ -47,7 +47,9 @@ if(WIN32)
     find_package(eccodes REQUIRED CONFIG)
 else()
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(ECCODES REQUIRED eccodes)
+    # IMPORTED_TARGET crée la cible PkgConfig::ECCODES avec includes + lib dirs
+    # + libs — évite le problème de -leccodes sans -L/opt/homebrew/lib sur macOS
+    pkg_check_modules(ECCODES REQUIRED IMPORTED_TARGET eccodes)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -76,9 +78,8 @@ endif()
 if(WIN32)
     target_link_libraries(stlaurent_indices_pi PRIVATE eccodes)
 else()
-    target_include_directories(stlaurent_indices_pi PRIVATE ${ECCODES_INCLUDE_DIRS})
-    target_link_libraries(stlaurent_indices_pi PRIVATE ${ECCODES_LIBRARIES})
-    target_compile_options(stlaurent_indices_pi PRIVATE ${ECCODES_CFLAGS_OTHER})
+    # PkgConfig::ECCODES contient includes + -L/chemin/homebrew + -leccodes
+    target_link_libraries(stlaurent_indices_pi PRIVATE PkgConfig::ECCODES)
 endif()
 
 # OpenGL
