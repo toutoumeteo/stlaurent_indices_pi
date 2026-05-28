@@ -117,7 +117,19 @@ mkdir -p ~/.local/lib/opencpn/
 cp build/libstlaurent_indices_pi.so ~/.local/lib/opencpn/
 ```
 
-Vérifier que le plugin est activé dans **Options → Plugins → Indices Saint-Laurent → Activer**.
+**Première installation seulement** — OpenCPN désactive les nouveaux plugins par défaut.
+Aller dans **Options → Plugins**, trouver *Indices Saint-Laurent* et cliquer **Activer**.
+
+> Si le plugin n'apparaît pas dans la liste, fermez OpenCPN et ajoutez manuellement
+> dans `~/.opencpn/opencpn.conf` (section `[PlugIns]`) :
+> ```ini
+> [PlugIns/libstlaurent_indices_pi.so]
+> bEnabled=1
+> ```
+> Puis relancez OpenCPN.
+
+Les mises à jour ultérieures du `.so` ne nécessitent pas cette étape — le plugin
+reste activé entre les sessions.
 
 ### macOS
 
