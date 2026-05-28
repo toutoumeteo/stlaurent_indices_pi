@@ -26,13 +26,15 @@ endif()
 
 # ---------------------------------------------------------------------------
 # wxWidgets — find_package pour les headers ; le lien est géré plus bas.
-#   On ne lie PAS wxWidgets sur macOS et Linux.
-#   Sur ces plateformes, OpenCPN embarque déjà wxWidgets dans son processus ;
-#   lier contre une version Homebrew/système DIFFÉRENTE créerait deux runtimes
-#   wx simultanés → échec de dlopen ou crash.
-#   Les symboles wx sont résolus automatiquement depuis OpenCPN à l'exécution
-#   (Linux : comportement par défaut du chargeur ; macOS : -undefined dynamic_lookup).
-#   Sur Windows : on lie explicitement (MSVC n'a pas de résolution dynamique).
+#   Linux  : on lie contre la version SYSTÈME (même que celle chargée par
+#             OpenCPN). Deux raisons :
+#             1. Le check de compatibilité OpenCPN 5.12+ (USE_LIBELF) scanne
+#                les DT_NEEDED et cherche "libwx_gtk3u_core-3.2" ; si absent
+#                → plugin rejeté ("Incompatible plugin detected").
+#             2. C'est la même bibliothèque → aucun double chargement.
+#   macOS  : on lie contre le bundle OpenCPN (voir bloc APPLE ci-dessous).
+#             Lier contre la version Homebrew créerait deux runtimes wx.
+#   Windows: on lie explicitement (MSVC n'a pas de résolution dynamique).
 # ---------------------------------------------------------------------------
 
 # Sur macOS (Apple Silicon), Homebrew est dans /opt/homebrew
@@ -141,9 +143,17 @@ if(UNIX AND NOT APPLE)
     target_link_libraries(stlaurent_indices_pi PRIVATE dl)
 endif()
 
-# wxWidgets — lien uniquement sur Windows (voir commentaire find_package ci-dessus)
-if(WIN32)
+# wxWidgets — lien sur Windows et Linux (pas macOS — bundle OpenCPN lié plus bas)
+if(NOT APPLE)
     target_link_libraries(stlaurent_indices_pi PRIVATE ${wxWidgets_LIBRARIES})
+endif()
+
+# Linux : forcer hash-style sysv → EI_OSABI=0 (UNIX - System V) comme OpenCPN.
+# Le défaut gcc/ld (--hash-style=gnu) produit EI_OSABI=3 (UNIX - GNU).
+# Le check ELF de OpenCPN 5.12+ compare les type_magic (qui incluent EI_OSABI) ;
+# une différence entraîne "Incompatible plugin detected".
+if(UNIX AND NOT APPLE)
+    target_link_options(stlaurent_indices_pi PRIVATE "-Wl,--hash-style=sysv")
 endif()
 
 # ---------------------------------------------------------------------------
