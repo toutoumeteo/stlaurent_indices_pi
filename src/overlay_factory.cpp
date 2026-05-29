@@ -237,25 +237,24 @@ void OverlayFactory::BuildTexture() {
 
 // ---------------------------------------------------------------------------
 // Dessin de la texture sur la carte
+//
+// IMPORTANT — pourquoi dessiner rangée par rangée (nj quads) ?
+// ----------------------------------------------------------------
+// OpenCPN utilise la projection Mercator : la latitude se convertit en pixels
+// de façon NON-LINÉAIRE (y = ln(tan(π/4 + lat/2))). Un seul GL_QUAD pour
+// toute la grille interpole linéairement entre les 4 coins, ce qui produit
+// une erreur systématique de ~30 km au centre de la grille (≈48°N).
+//
+// La solution : découper la grille en nj bandes horizontales d'une rangée
+// chacune. Pour chaque bande, GetCanvasPixLL calcule exactement les pixels
+// des bords sud/nord → l'erreur résiduelle est sub-pixel (< 0.1 km).
 // ---------------------------------------------------------------------------
 void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
     const GridInfo& g = m_data->grid;
 
-    // Coordonnées géographiques des 4 coins de la grille.
-    // En GRIB2, lat(j) et lon(i) sont les CENTRES des cellules.
-    // Pour un rendu correct, la texture doit couvrir jusqu'aux BORDS des
-    // cellules extérieures, soit ± une demi-maille au-delà des centres.
-    double latS = g.lat(0)        - g.dlat / 2.0;  // bord sud de la 1ʳᵉ rangée
-    double latN = g.lat(g.nj - 1) + g.dlat / 2.0;  // bord nord de la dernière rangée
-    double lonW = g.lon(0)        - g.dlon / 2.0;  // bord ouest de la 1ʳᵉ colonne
-    double lonE = g.lon(g.ni - 1) + g.dlon / 2.0;  // bord est de la dernière colonne
-
-    // Convertir en pixels écran
-    wxPoint sw, se, ne, nw;
-    GetCanvasPixLL(vp, &sw, latS, lonW);
-    GetCanvasPixLL(vp, &se, latS, lonE);
-    GetCanvasPixLL(vp, &ne, latN, lonE);
-    GetCanvasPixLL(vp, &nw, latN, lonW);
+    // Bords ouest et est (longitude → Mercator est linéaire, un seul calcul suffit)
+    double lonW = g.lon(0)        - g.dlon / 2.0;
+    double lonE = g.lon(g.ni - 1) + g.dlon / 2.0;
 
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, m_textureId);
@@ -266,11 +265,27 @@ void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
     glColor4f(1.0f, 1.0f, 1.0f, 0.75f);  // 75% d'opacité
 
     glBegin(GL_QUADS);
-    // Coin bas-gauche (SW) → coord texture (0,0) en bas
-    glTexCoord2f(0.0f, 0.0f);  glVertex2i(sw.x, sw.y);
-    glTexCoord2f(1.0f, 0.0f);  glVertex2i(se.x, se.y);
-    glTexCoord2f(1.0f, 1.0f);  glVertex2i(ne.x, ne.y);
-    glTexCoord2f(0.0f, 1.0f);  glVertex2i(nw.x, nw.y);
+    for (int j = 0; j < g.nj; ++j) {
+        // Bords sud et nord exacts de cette rangée de cellules GRIB
+        double rowLatS = g.lat(j) - g.dlat / 2.0;
+        double rowLatN = g.lat(j) + g.dlat / 2.0;
+
+        // Coordonnées texture verticales : j=0 → bas (t=0), j=nj-1 → haut (t=1)
+        float tv0 = (float)j       / (float)g.nj;  // bord sud de la rangée j
+        float tv1 = (float)(j + 1) / (float)g.nj;  // bord nord de la rangée j
+
+        // Conversion géo → pixels écran pour cette bande
+        wxPoint sw, se, ne, nw;
+        GetCanvasPixLL(vp, &sw, rowLatS, lonW);
+        GetCanvasPixLL(vp, &se, rowLatS, lonE);
+        GetCanvasPixLL(vp, &ne, rowLatN, lonE);
+        GetCanvasPixLL(vp, &nw, rowLatN, lonW);
+
+        glTexCoord2f(0.0f, tv0);  glVertex2i(sw.x, sw.y);
+        glTexCoord2f(1.0f, tv0);  glVertex2i(se.x, se.y);
+        glTexCoord2f(1.0f, tv1);  glVertex2i(ne.x, ne.y);
+        glTexCoord2f(0.0f, tv1);  glVertex2i(nw.x, nw.y);
+    }
     glEnd();
 
     glBindTexture(GL_TEXTURE_2D, 0);
