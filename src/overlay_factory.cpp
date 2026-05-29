@@ -325,7 +325,10 @@ void OverlayFactory::DrawArrows(PlugIn_ViewPort* vp) {
 
             wxPoint p;
             GetCanvasPixLL(vp, &p, g.lat(j), g.lon(i));
-            DrawArrowGL((float)p.x, (float)p.y, (float)dir_deg, arrow_len);
+            // Convention GRIB ECCC/RDWPS : direction d'où viennent les vagues
+            // (convention météo, « from »). On ajoute 180° pour obtenir le sens
+            // de propagation et pointer la flèche dans la bonne direction.
+            DrawArrowGL((float)p.x, (float)p.y, (float)(dir_deg + 180.0), arrow_len);
         }
     }
 }
