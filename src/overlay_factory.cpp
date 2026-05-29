@@ -58,6 +58,10 @@ OverlayFactory::OverlayFactory()
     , m_textureValid(false)
     , m_texWidth(0)
     , m_texHeight(0)
+    , m_legendTexId(0)
+    , m_legendTexValid(false)
+    , m_legendTexW(0)
+    , m_legendTexH(0)
 {}
 
 OverlayFactory::~OverlayFactory() {
@@ -72,6 +76,7 @@ void OverlayFactory::SetData(const IndexData* data, int stepIndex) {
     m_data      = data;
     m_stepIndex = stepIndex;
     InvalidateTexture();
+    m_legendTexValid = false;  // reconstruire la légende au prochain rendu
 }
 
 void OverlayFactory::InvalidateTexture() {
@@ -87,6 +92,12 @@ void OverlayFactory::DestroyTexture() {
         m_textureId = 0;
     }
     m_textureValid = false;
+
+    if (m_legendTexId) {
+        glDeleteTextures(1, &m_legendTexId);
+        m_legendTexId = 0;
+    }
+    m_legendTexValid = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,8 +107,9 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
     if (!m_data || !m_data->isLoaded()) return false;
     if (m_stepIndex >= (int)m_data->scalarSteps.size()) return false;
 
-    if (!m_textureValid) BuildTexture();
-    if (!m_textureId)    return true;
+    if (!m_textureValid)    BuildTexture();
+    if (!m_textureId)       return true;
+    if (!m_legendTexValid)  BuildLegendTexture();
 
     ensureGLUseProgram();
     GLint saved_program = 0;
@@ -120,6 +132,8 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
         m_stepIndex < (int)m_data->directionSteps.size()) {
         DrawArrows(vp);
     }
+
+    DrawLegend(vp);
 
     glMatrixMode(GL_PROJECTION); glPopMatrix();
     glMatrixMode(GL_MODELVIEW);  glPopMatrix();
@@ -286,6 +300,109 @@ void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
         glTexCoord2f(1.0f, tv1);  glVertex2i(ne.x, ne.y);
         glTexCoord2f(0.0f, tv1);  glVertex2i(nw.x, nw.y);
     }
+    glEnd();
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_TEXTURE_2D);
+}
+
+// ---------------------------------------------------------------------------
+// Construction de la texture légende via wxBitmap + wxMemoryDC
+// La légende est reconstruite uniquement quand l'indice change (SetData).
+// ---------------------------------------------------------------------------
+void OverlayFactory::BuildLegendTexture() {
+    if (!m_data) return;
+    const IndexDefinition& def = m_data->def;
+
+    // Dimensions de la légende en pixels
+    const int W = 210, H = 65;
+    m_legendTexW = W;
+    m_legendTexH = H;
+
+    wxBitmap bmp(W, H);
+    {
+        wxMemoryDC dc(bmp);
+
+        // Fond sombre
+        dc.SetBackground(wxBrush(wxColour(25, 25, 25)));
+        dc.Clear();
+
+        // Titre : "Indice d'agitation [-]"
+        wxString title = wxString::FromUTF8(def.displayName.c_str())
+                       + wxT(" [") + wxString::FromUTF8(def.units.c_str()) + wxT("]");
+        dc.SetFont(wxFont(8, wxFONTFAMILY_DEFAULT,
+                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD));
+        dc.SetTextForeground(wxColour(230, 230, 230));
+        dc.DrawText(title, 8, 5);
+
+        // Barre de couleur (même palette que l'overlay)
+        const int barX = 8, barY = 23, barW = W - 16, barH = 18;
+        for (int x = 0; x < barW; ++x) {
+            float t = (float)x / (float)(barW - 1);
+            unsigned char r, g, b, a;
+            ValueToRGBA(t, r, g, b, a);
+            dc.SetPen(wxPen(wxColour(r, g, b)));
+            dc.DrawLine(barX + x, barY, barX + x, barY + barH);
+        }
+        // Bordure fine autour de la barre
+        dc.SetPen(wxPen(wxColour(160, 160, 160)));
+        dc.SetBrush(*wxTRANSPARENT_BRUSH);
+        dc.DrawRectangle(barX, barY, barW, barH);
+
+        // Valeurs min et max sous la barre
+        dc.SetFont(wxFont(8, wxFONTFAMILY_DEFAULT,
+                          wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
+        dc.SetTextForeground(wxColour(200, 200, 200));
+        wxString minStr = wxString::Format(wxT("%.1f"), def.minValue);
+        wxString maxStr = wxString::Format(wxT("%.1f"), def.maxValue);
+        dc.DrawText(minStr, barX, barY + barH + 3);
+        wxSize maxSz = dc.GetTextExtent(maxStr);
+        dc.DrawText(maxStr, barX + barW - maxSz.x, barY + barH + 3);
+
+    }  // dc libéré ici → SelectObject(wxNullBitmap) implicite
+
+    // wxImage : données RGB top-to-bottom (ligne 0 = haut de l'image)
+    // glTexImage2D interprète la ligne 0 comme le bas de la texture (v=0).
+    // → On dessine avec v=0 en haut de l'écran pour compenser (voir DrawLegend).
+    wxImage img = bmp.ConvertToImage();
+
+    if (!m_legendTexId) glGenTextures(1, &m_legendTexId);
+    glBindTexture(GL_TEXTURE_2D, m_legendTexId);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, W, H,
+                 0, GL_RGB, GL_UNSIGNED_BYTE, img.GetData());
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    m_legendTexValid = true;
+}
+
+// ---------------------------------------------------------------------------
+// Dessin de la légende dans le coin bas-gauche du viewport
+// ---------------------------------------------------------------------------
+void OverlayFactory::DrawLegend(PlugIn_ViewPort* vp) {
+    if (!m_legendTexId || !m_legendTexValid) return;
+
+    // Position coin bas-gauche, 15 px des bords
+    const int margin = 15;
+    int x = margin;
+    int y = vp->pix_height - margin - m_legendTexH;
+
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, m_legendTexId);
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glColor4f(1.0f, 1.0f, 1.0f, 0.90f);  // 90 % opaque
+
+    // wxImage fournit les lignes du haut vers le bas, mais OpenGL place la
+    // ligne 0 des données en bas de la texture (v=0).
+    // → assigner v=0 au coin haut-écran et v=1 au coin bas-écran corrige l'inversion.
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.0f, 0.0f);  glVertex2i(x,                y);               // haut-gauche
+    glTexCoord2f(1.0f, 0.0f);  glVertex2i(x + m_legendTexW, y);               // haut-droit
+    glTexCoord2f(1.0f, 1.0f);  glVertex2i(x + m_legendTexW, y + m_legendTexH);// bas-droit
+    glTexCoord2f(0.0f, 1.0f);  glVertex2i(x,                y + m_legendTexH);// bas-gauche
     glEnd();
 
     glBindTexture(GL_TEXTURE_2D, 0);

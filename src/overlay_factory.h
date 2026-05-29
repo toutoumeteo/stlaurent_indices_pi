@@ -52,14 +52,21 @@ private:
     const IndexData* m_data;      // pointeur non-propriétaire
     int              m_stepIndex; // pas de temps courant
 
-    // --- Cache texture OpenGL ---
+    // --- Cache texture OpenGL — champ scalaire ---
     GLuint m_textureId;
     bool   m_textureValid;
     int    m_texWidth;
     int    m_texHeight;
 
-    // --- Construction de la texture ---
+    // --- Cache texture OpenGL — légende ---
+    GLuint m_legendTexId;
+    bool   m_legendTexValid;
+    int    m_legendTexW;
+    int    m_legendTexH;
+
+    // --- Construction des textures ---
     void BuildTexture();
+    void BuildLegendTexture();  // crée la texture légende via wxBitmap
 
     // Convertit une valeur normalisée [0,1] en couleur RGBA
     // Palette : bleu → cyan → vert → jaune → orange → rouge
@@ -68,6 +75,9 @@ private:
 
     // --- Rendu de la texture sur la carte ---
     void DrawTexture(PlugIn_ViewPort* vp);
+
+    // --- Rendu de la légende (coin bas-gauche) ---
+    void DrawLegend(PlugIn_ViewPort* vp);
 
     // --- Rendu des flèches de direction ---
     void DrawArrows(PlugIn_ViewPort* vp);
