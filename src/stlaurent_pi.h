@@ -44,6 +44,9 @@ public:
     int  GetToolbarToolCount() override;
     void OnToolbarToolCallback(int id) override;
 
+    // --- Curseur ---
+    void SetCursorLatLon(double lat, double lon) override;
+
     // --- API appelée par le dialog ---
 
     // Charge tous les indices disponibles pour une run

@@ -62,6 +62,17 @@ OverlayFactory::OverlayFactory()
     , m_legendTexValid(false)
     , m_legendTexW(0)
     , m_legendTexH(0)
+    , m_cursorLat(0.0)
+    , m_cursorLon(0.0)
+    , m_cursorInGrid(false)
+    , m_cursorScalar(0.0)
+    , m_cursorDir(-1.0)
+    , m_cursorGridI(-1)
+    , m_cursorGridJ(-1)
+    , m_cursorTexId(0)
+    , m_cursorTexValid(false)
+    , m_cursorTexW(0)
+    , m_cursorTexH(0)
 {}
 
 OverlayFactory::~OverlayFactory() {
@@ -80,9 +91,13 @@ void OverlayFactory::SetData(const IndexData* data, int stepIndex) {
 }
 
 void OverlayFactory::InvalidateTexture() {
-    // Marque seulement la texture comme invalide — PAS de glDeleteTextures ici
+    // Marque seulement les textures comme invalides — PAS de glDeleteTextures ici
     // car cette fonction est appelée hors contexte GL (chargement de données, etc.)
-    m_textureValid = false;
+    m_textureValid  = false;
+    // Forcer le recalcul du tooltip au prochain rendu (les valeurs ont changé)
+    m_cursorGridI   = -1;
+    m_cursorGridJ   = -1;
+    m_cursorTexValid = false;
 }
 
 void OverlayFactory::DestroyTexture() {
@@ -98,6 +113,12 @@ void OverlayFactory::DestroyTexture() {
         m_legendTexId = 0;
     }
     m_legendTexValid = false;
+
+    if (m_cursorTexId) {
+        glDeleteTextures(1, &m_cursorTexId);
+        m_cursorTexId = 0;
+    }
+    m_cursorTexValid = false;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,6 +155,11 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
     }
 
     DrawLegend(vp);
+
+    if (m_cursorInGrid) {
+        if (!m_cursorTexValid) BuildCursorTexture();
+        DrawCursorInfo(vp);
+    }
 
     glMatrixMode(GL_PROJECTION); glPopMatrix();
     glMatrixMode(GL_MODELVIEW);  glPopMatrix();
@@ -403,6 +429,160 @@ void OverlayFactory::DrawLegend(PlugIn_ViewPort* vp) {
     glTexCoord2f(1.0f, 0.0f);  glVertex2i(x + m_legendTexW, y);               // haut-droit
     glTexCoord2f(1.0f, 1.0f);  glVertex2i(x + m_legendTexW, y + m_legendTexH);// bas-droit
     glTexCoord2f(0.0f, 1.0f);  glVertex2i(x,                y + m_legendTexH);// bas-gauche
+    glEnd();
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glDisable(GL_TEXTURE_2D);
+}
+
+// ---------------------------------------------------------------------------
+// Direction cardinale (8 secteurs, en français)
+// ---------------------------------------------------------------------------
+static const char* cardinalDir(double deg) {
+    deg = fmod(deg + 360.0, 360.0);
+    static const char* dirs[] = { "N", "NE", "E", "SE", "S", "SO", "O", "NO" };
+    int idx = (int)(deg / 45.0 + 0.5) % 8;
+    return dirs[idx];
+}
+
+// ---------------------------------------------------------------------------
+// Mise à jour de la position du curseur — appelé hors contexte GL
+// ---------------------------------------------------------------------------
+void OverlayFactory::UpdateCursorPosition(double lat, double lon) {
+    if (!m_data || !m_data->isLoaded() ||
+        m_stepIndex >= (int)m_data->scalarSteps.size()) {
+        m_cursorInGrid = false;
+        return;
+    }
+
+    const GridInfo& g = m_data->grid;
+    int i, j;
+    m_cursorLat = lat;
+    m_cursorLon = lon;
+
+    if (!g.toIndex(lon, lat, i, j)) {
+        m_cursorInGrid = false;
+        return;
+    }
+
+    // Valeur scalaire — si manquante (terre/no-data), pas de tooltip
+    double val = m_data->scalarSteps[m_stepIndex].get(i, j, g);
+    if (val >= TimeStep::MISSING_VALUE - 1.0) {
+        m_cursorInGrid = false;
+        return;
+    }
+
+    m_cursorInGrid = true;
+
+    // Même cellule qu'avant et texture valide → rien à faire
+    if (i == m_cursorGridI && j == m_cursorGridJ && m_cursorTexValid)
+        return;
+
+    m_cursorGridI  = i;
+    m_cursorGridJ  = j;
+    m_cursorScalar = val;
+
+    // Direction (si disponible)
+    if (m_data->hasDirection() &&
+        m_stepIndex < (int)m_data->directionSteps.size()) {
+        double d = m_data->directionSteps[m_stepIndex].get(i, j, g);
+        m_cursorDir = (d < TimeStep::MISSING_VALUE - 1.0) ? d : -1.0;
+    } else {
+        m_cursorDir = -1.0;
+    }
+
+    m_cursorTexValid = false;  // reconstruire le tooltip
+}
+
+// ---------------------------------------------------------------------------
+// Construction de la texture tooltip curseur
+// ---------------------------------------------------------------------------
+void OverlayFactory::BuildCursorTexture() {
+    if (!m_cursorInGrid || !m_data) return;
+
+    const IndexDefinition& def = m_data->def;
+
+    // Ligne 1 : valeur scalaire
+    wxString line1 = wxString::Format(wxT("%s : %.2f %s"),
+        wxString::FromUTF8(def.displayName.c_str()),
+        m_cursorScalar,
+        wxString::FromUTF8(def.units.c_str()));
+
+    // Ligne 2 : direction de propagation (données GRIB + 180°, cohérent avec les flèches)
+    bool hasDir = (m_cursorDir >= 0.0);
+    wxString line2;
+    if (hasDir) {
+        double propDeg = fmod(m_cursorDir + 180.0, 360.0);
+        line2 = wxString::Format(wxT("Direction : %.0f° %s"),
+            propDeg,
+            wxString::FromUTF8(cardinalDir(propDeg)));
+    }
+
+    // Dimensions : une ou deux lignes
+    const int W = 210;
+    const int H = hasDir ? 50 : 30;
+    m_cursorTexW = W;
+    m_cursorTexH = H;
+
+    wxBitmap bmp(W, H);
+    {
+        wxMemoryDC dc(bmp);
+        dc.SetBackground(wxBrush(wxColour(15, 15, 15)));
+        dc.Clear();
+
+        wxFont font(9, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+        dc.SetFont(font);
+        dc.SetTextForeground(wxColour(240, 240, 240));
+        dc.DrawText(line1, 8, 7);
+        if (hasDir) dc.DrawText(line2, 8, 27);
+    }
+
+    wxImage img = bmp.ConvertToImage();
+
+    if (!m_cursorTexId) glGenTextures(1, &m_cursorTexId);
+    glBindTexture(GL_TEXTURE_2D, m_cursorTexId);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, W, H,
+                 0, GL_RGB, GL_UNSIGNED_BYTE, img.GetData());
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    m_cursorTexValid = true;
+}
+
+// ---------------------------------------------------------------------------
+// Dessin du tooltip curseur près du pointeur
+// ---------------------------------------------------------------------------
+void OverlayFactory::DrawCursorInfo(PlugIn_ViewPort* vp) {
+    if (!m_cursorTexId || !m_cursorTexValid) return;
+
+    // Position écran du curseur
+    wxPoint cp;
+    GetCanvasPixLL(vp, &cp, m_cursorLat, m_cursorLon);
+
+    // Décalage par défaut : légèrement à droite et au-dessus du curseur
+    int x = cp.x + 16;
+    int y = cp.y - m_cursorTexH - 8;
+
+    // Ajustement si le tooltip dépasse les bords du viewport
+    if (x + m_cursorTexW > vp->pix_width)
+        x = cp.x - m_cursorTexW - 12;
+    if (y < 0)
+        y = cp.y + 16;
+
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, m_cursorTexId);
+    glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glColor4f(1.0f, 1.0f, 1.0f, 0.92f);
+
+    // Même convention que la légende : ligne 0 du wxImage (haut) → t=0
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.0f, 0.0f);  glVertex2i(x,              y);
+    glTexCoord2f(1.0f, 0.0f);  glVertex2i(x + m_cursorTexW, y);
+    glTexCoord2f(1.0f, 1.0f);  glVertex2i(x + m_cursorTexW, y + m_cursorTexH);
+    glTexCoord2f(0.0f, 1.0f);  glVertex2i(x,              y + m_cursorTexH);
     glEnd();
 
     glBindTexture(GL_TEXTURE_2D, 0);

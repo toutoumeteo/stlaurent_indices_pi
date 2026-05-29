@@ -73,7 +73,8 @@ int stlaurent_pi::Init() {
     return (WANTS_OVERLAY_CALLBACK         |
             WANTS_OPENGL_OVERLAY_CALLBACK  |
             WANTS_TOOLBAR_CALLBACK         |
-            INSTALLS_TOOLBAR_TOOL);
+            INSTALLS_TOOLBAR_TOOL          |
+            WANTS_CURSOR_LATLON);
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +137,14 @@ void stlaurent_pi::OnToolbarToolCallback(int id) {
         SetToolbarItemState(m_toolbar_item_id, true);
         m_dialog->Raise();
     }
+}
+
+// ---------------------------------------------------------------------------
+// Curseur — appelé par OpenCPN à chaque déplacement souris sur la carte
+// ---------------------------------------------------------------------------
+void stlaurent_pi::SetCursorLatLon(double lat, double lon) {
+    if (m_overlayFactory && m_bOverlayVisible)
+        m_overlayFactory->UpdateCursorPosition(lat, lon);
 }
 
 // ---------------------------------------------------------------------------

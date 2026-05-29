@@ -44,6 +44,10 @@ public:
     // Sûr à appeler hors contexte GL
     void InvalidateTexture();
 
+    // Met à jour la position du curseur souris (géographique)
+    // Appelé depuis stlaurent_pi::SetCursorLatLon()
+    void UpdateCursorPosition(double lat, double lon);
+
     // Libère la ressource GL — à appeler depuis DeInit() seulement
     void DestroyTexture();
 
@@ -64,9 +68,25 @@ private:
     int    m_legendTexW;
     int    m_legendTexH;
 
+    // --- Curseur : position et valeurs interpolées ---
+    double m_cursorLat;
+    double m_cursorLon;
+    bool   m_cursorInGrid;    // curseur sur la grille ET valeur non-manquante
+    double m_cursorScalar;    // valeur scalaire au point curseur
+    double m_cursorDir;       // direction au point curseur (-1 = indisponible)
+    int    m_cursorGridI;     // dernière cellule grille (évite les rebuilds inutiles)
+    int    m_cursorGridJ;
+
+    // --- Cache texture OpenGL — tooltip curseur ---
+    GLuint m_cursorTexId;
+    bool   m_cursorTexValid;
+    int    m_cursorTexW;
+    int    m_cursorTexH;
+
     // --- Construction des textures ---
     void BuildTexture();
-    void BuildLegendTexture();  // crée la texture légende via wxBitmap
+    void BuildLegendTexture();   // crée la texture légende via wxBitmap
+    void BuildCursorTexture();   // crée la texture tooltip curseur via wxBitmap
 
     // Convertit une valeur normalisée [0,1] en couleur RGBA
     // Palette : bleu → cyan → vert → jaune → orange → rouge
@@ -78,6 +98,9 @@ private:
 
     // --- Rendu de la légende (coin bas-gauche) ---
     void DrawLegend(PlugIn_ViewPort* vp);
+
+    // --- Rendu du tooltip curseur ---
+    void DrawCursorInfo(PlugIn_ViewPort* vp);
 
     // --- Rendu des flèches de direction ---
     void DrawArrows(PlugIn_ViewPort* vp);
