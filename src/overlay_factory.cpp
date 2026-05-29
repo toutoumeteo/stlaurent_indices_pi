@@ -241,12 +241,14 @@ void OverlayFactory::BuildTexture() {
 void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
     const GridInfo& g = m_data->grid;
 
-    // Coordonnées géographiques des 4 coins de la grille
-    // Coin SW (bas-gauche), SE, NE, NW
-    double latS = g.lat(0);
-    double latN = g.lat(g.nj - 1);
-    double lonW = g.lon(0);
-    double lonE = g.lon(g.ni - 1);
+    // Coordonnées géographiques des 4 coins de la grille.
+    // En GRIB2, lat(j) et lon(i) sont les CENTRES des cellules.
+    // Pour un rendu correct, la texture doit couvrir jusqu'aux BORDS des
+    // cellules extérieures, soit ± une demi-maille au-delà des centres.
+    double latS = g.lat(0)        - g.dlat / 2.0;  // bord sud de la 1ʳᵉ rangée
+    double latN = g.lat(g.nj - 1) + g.dlat / 2.0;  // bord nord de la dernière rangée
+    double lonW = g.lon(0)        - g.dlon / 2.0;  // bord ouest de la 1ʳᵉ colonne
+    double lonE = g.lon(g.ni - 1) + g.dlon / 2.0;  // bord est de la dernière colonne
 
     // Convertir en pixels écran
     wxPoint sw, se, ne, nw;
