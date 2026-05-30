@@ -397,10 +397,10 @@ void OverlayFactory::BuildLegendTexture() {
 void OverlayFactory::DrawLegend(PlugIn_ViewPort* vp) {
     if (!m_legendTexId || !m_legendTexValid) return;
 
-    // Position coin bas-droit, 15 px des bords
-    // (bas-gauche est occupé par l'échelle de distance d'OpenCPN)
+    // Position bas-centre, 15 px du bas
+    // (bas-gauche = échelle de distance, bas-droit = boutons de navigation)
     const int margin = 15;
-    int x = vp->pix_width  - margin - m_legendTexW;
+    int x = (vp->pix_width - m_legendTexW) / 2;
     int y = vp->pix_height - margin - m_legendTexH;
 
     glEnable(GL_TEXTURE_2D);
