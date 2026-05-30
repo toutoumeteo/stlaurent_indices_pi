@@ -292,11 +292,8 @@ void StLaurentDialog::UpdateCursorDisplay(int dataIndex, double scalar,
         text = wxString::Format(wxT("%.2f %s"), scalar, units);
 
         if (dir >= 0.0) {
-            // Direction brute du fichier GRIB (convention météo : provenance)
             double dispDeg = fmod(dir + 360.0, 360.0);
-            static const char* dirs[] = {"N","NE","E","SE","S","SO","O","NO"};
-            int idx = (int)(dispDeg / 45.0 + 0.5) % 8;
-            text += wxString::Format(wxT("  %s"), wxString::FromUTF8(dirs[idx]));
+            text += wxString::Format(wxT("  %.0f°"), dispDeg);
         }
     }
 
