@@ -292,10 +292,10 @@ void StLaurentDialog::UpdateCursorDisplay(int dataIndex, double scalar,
         text = wxString::Format(wxT("%.2f %s"), scalar, units);
 
         if (dir >= 0.0) {
-            // Direction de propagation (GRIB + 180°), cohérente avec les flèches
-            double propDeg = fmod(dir + 180.0, 360.0);
+            // Direction brute du fichier GRIB (convention météo : provenance)
+            double dispDeg = fmod(dir + 360.0, 360.0);
             static const char* dirs[] = {"N","NE","E","SE","S","SO","O","NO"};
-            int idx = (int)(propDeg / 45.0 + 0.5) % 8;
+            int idx = (int)(dispDeg / 45.0 + 0.5) % 8;
             text += wxString::Format(wxT("  %s"), wxString::FromUTF8(dirs[idx]));
         }
     }

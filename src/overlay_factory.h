@@ -82,16 +82,10 @@ private:
     int    m_cursorGridI;     // dernière cellule grille (évite les rebuilds inutiles)
     int    m_cursorGridJ;
 
-    // --- Cache texture OpenGL — tooltip curseur ---
-    GLuint m_cursorTexId;
-    bool   m_cursorTexValid;
-    int    m_cursorTexW;
-    int    m_cursorTexH;
 
     // --- Construction des textures ---
     void BuildTexture();
     void BuildLegendTexture();   // crée la texture légende via wxBitmap
-    void BuildCursorTexture();   // crée la texture tooltip curseur via wxBitmap
 
     // Convertit une valeur normalisée [0,1] en couleur RGBA
     // Palette : bleu → cyan → vert → jaune → orange → rouge
@@ -104,8 +98,6 @@ private:
     // --- Rendu de la légende (coin bas-gauche) ---
     void DrawLegend(PlugIn_ViewPort* vp);
 
-    // --- Rendu du tooltip curseur ---
-    void DrawCursorInfo(PlugIn_ViewPort* vp);
 
     // --- Rendu des flèches de direction ---
     void DrawArrows(PlugIn_ViewPort* vp);
