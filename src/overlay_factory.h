@@ -44,6 +44,9 @@ public:
     // Sûr à appeler hors contexte GL
     void InvalidateTexture();
 
+    void SetShowLegend(bool show) { m_showLegend = show; }
+    bool GetShowLegend()    const { return m_showLegend; }
+
     // Met à jour la position du curseur souris (géographique)
     // Appelé depuis stlaurent_pi::SetCursorLatLon()
     void UpdateCursorPosition(double lat, double lon);
@@ -60,6 +63,7 @@ private:
     // --- Données courantes ---
     const IndexData* m_data;      // pointeur non-propriétaire
     int              m_stepIndex; // pas de temps courant
+    bool             m_showLegend;
 
     // --- Cache texture OpenGL — champ scalaire ---
     GLuint m_textureId;

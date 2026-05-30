@@ -16,11 +16,15 @@
 // ---------------------------------------------------------------------------
 // Table d'événements
 // ---------------------------------------------------------------------------
+// ID dédié pour la checkbox légende (évite la collision avec EVT_CHECKBOX(wxID_ANY))
+static const int ID_CHK_LEGEND = wxID_HIGHEST + 1;
+
 wxBEGIN_EVENT_TABLE(StLaurentDialog, wxDialog)
-    EVT_BUTTON(wxID_OPEN,       StLaurentDialog::OnOpenRun)
-    EVT_CHECKBOX(wxID_ANY,      StLaurentDialog::OnCheckboxChanged)
-    EVT_SLIDER(wxID_ANY,        StLaurentDialog::OnTimeSlider)
-    EVT_CLOSE(                  StLaurentDialog::OnClose)
+    EVT_BUTTON(wxID_OPEN,           StLaurentDialog::OnOpenRun)
+    EVT_CHECKBOX(ID_CHK_LEGEND,     StLaurentDialog::OnLegendToggle)
+    EVT_CHECKBOX(wxID_ANY,          StLaurentDialog::OnCheckboxChanged)
+    EVT_SLIDER(wxID_ANY,            StLaurentDialog::OnTimeSlider)
+    EVT_CLOSE(                      StLaurentDialog::OnClose)
 wxEND_EVENT_TABLE()
 
 // ---------------------------------------------------------------------------
@@ -51,6 +55,11 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
         new wxStaticBoxSizer(wxVERTICAL, this, _("Indice"));
     m_checkSizer = indiceBox;
     mainSizer->Add(indiceBox, 0, wxALL | wxEXPAND, 6);
+
+    // --- Options d'affichage ---
+    m_chkLegend = new wxCheckBox(this, ID_CHK_LEGEND, _("Afficher la légende"));
+    m_chkLegend->SetValue(true);
+    mainSizer->Add(m_chkLegend, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
     // --- Curseur de temps ---
     row = new wxBoxSizer(wxHORIZONTAL);
@@ -269,6 +278,13 @@ void StLaurentDialog::UpdateTimeLabel() {
     wxString label;
     label.Printf("H+%02d  —  %s", ts.stepHours, buf);
     m_lblTime->SetLabel(label);
+}
+
+// ---------------------------------------------------------------------------
+// Toggle légende
+// ---------------------------------------------------------------------------
+void StLaurentDialog::OnLegendToggle(wxCommandEvent& /*evt*/) {
+    m_plugin->SetLegendVisible(m_chkLegend->GetValue());
 }
 
 // ---------------------------------------------------------------------------

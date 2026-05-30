@@ -54,6 +54,7 @@ static void ensureGLUseProgram() {
 OverlayFactory::OverlayFactory()
     : m_data(nullptr)
     , m_stepIndex(0)
+    , m_showLegend(true)
     , m_textureId(0)
     , m_textureValid(false)
     , m_texWidth(0)
@@ -120,7 +121,7 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
 
     if (!m_textureValid)    BuildTexture();
     if (!m_textureId)       return true;
-    if (!m_legendTexValid)  BuildLegendTexture();
+    if (m_showLegend && !m_legendTexValid) BuildLegendTexture();
 
     ensureGLUseProgram();
     GLint saved_program = 0;
@@ -144,7 +145,7 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
         DrawArrows(vp);
     }
 
-    DrawLegend(vp);
+    if (m_showLegend) DrawLegend(vp);
 
     glMatrixMode(GL_PROJECTION); glPopMatrix();
     glMatrixMode(GL_MODELVIEW);  glPopMatrix();
@@ -396,9 +397,10 @@ void OverlayFactory::BuildLegendTexture() {
 void OverlayFactory::DrawLegend(PlugIn_ViewPort* vp) {
     if (!m_legendTexId || !m_legendTexValid) return;
 
-    // Position coin bas-gauche, 15 px des bords
+    // Position coin bas-droit, 15 px des bords
+    // (bas-gauche est occupé par l'échelle de distance d'OpenCPN)
     const int margin = 15;
-    int x = margin;
+    int x = vp->pix_width  - margin - m_legendTexW;
     int y = vp->pix_height - margin - m_legendTexH;
 
     glEnable(GL_TEXTURE_2D);

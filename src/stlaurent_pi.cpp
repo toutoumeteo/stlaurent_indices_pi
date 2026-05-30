@@ -239,6 +239,15 @@ void stlaurent_pi::UpdateOverlay() {
     m_overlayFactory->SetData(&data, m_currentStep);
 }
 
+void stlaurent_pi::SetLegendVisible(bool show) {
+    if (m_overlayFactory) m_overlayFactory->SetShowLegend(show);
+    RequestRefresh();
+}
+
+bool stlaurent_pi::GetLegendVisible() const {
+    return m_overlayFactory ? m_overlayFactory->GetShowLegend() : true;
+}
+
 void stlaurent_pi::SetOverlayVisible(bool show) {
     m_bOverlayVisible = show;
     if (!show) {

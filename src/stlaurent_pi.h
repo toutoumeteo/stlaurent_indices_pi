@@ -63,6 +63,9 @@ public:
     void SetOverlayVisible(bool show);
     bool GetOverlayVisible() const { return m_bOverlayVisible; }
 
+    void SetLegendVisible(bool show);
+    bool GetLegendVisible() const;
+
     // --- Accès en lecture pour le dialog ---
     const std::vector<IndexData>& GetLoadedData()  const { return m_loadedData; }
     int  GetCurrentStep()  const { return m_currentStep; }
