@@ -122,22 +122,38 @@ void StLaurentDialog::RefreshAfterLoad() {
     const auto& data = m_plugin->GetLoadedData();
     if (data.empty()) return;
 
-    // --- Détruire les anciennes checkboxes ---
-    for (wxCheckBox* cb : m_checkboxes) {
-        m_checkSizer->Detach(cb);
-        cb->Destroy();
-    }
+    // --- Détruire les anciennes checkboxes et labels ---
+    for (wxCheckBox* cb : m_checkboxes) cb->Destroy();
+    for (wxStaticText* lbl : m_valueLabels) lbl->Destroy();
     m_checkboxes.clear();
+    m_valueLabels.clear();
+    // Vider le sizer (les widgets sont déjà détruits)
+    m_checkSizer->Clear(false);
 
-    // --- Créer une checkbox par indice ---
+    // --- Créer une ligne par indice : [checkbox] [valeur au curseur] ---
     // Sur GTK (Linux) et macOS, les enfants d'un wxStaticBoxSizer DOIVENT
     // avoir le StaticBox comme parent — pas le dialog — sinon ils n'apparaissent pas.
     wxWindow* cbParent = m_checkSizer->GetStaticBox();
     for (const auto& d : data) {
+        wxBoxSizer* row = new wxBoxSizer(wxHORIZONTAL);
+
         wxCheckBox* cb = new wxCheckBox(cbParent, wxID_ANY,
-                                         wxString::FromUTF8(d.def.displayName));
-        m_checkSizer->Add(cb, 0, wxALL, 4);
+                                        wxString::FromUTF8(d.def.displayName));
+        row->Add(cb, 1, wxALIGN_CENTER_VERTICAL);
+
+        // Label de valeur : largeur fixe, aligné à droite
+        // Monospace pour que les chiffres ne bougent pas d'un rendu à l'autre
+        wxStaticText* lbl = new wxStaticText(cbParent, wxID_ANY, wxT("—"),
+                                              wxDefaultPosition, wxSize(130, -1),
+                                              wxALIGN_RIGHT | wxST_NO_AUTORESIZE);
+        wxFont monoFont = lbl->GetFont();
+        monoFont.SetFamily(wxFONTFAMILY_TELETYPE);
+        lbl->SetFont(monoFont);
+        row->Add(lbl, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 8);
+
+        m_checkSizer->Add(row, 0, wxALL | wxEXPAND, 4);
         m_checkboxes.push_back(cb);
+        m_valueLabels.push_back(lbl);
     }
 
     // --- Auto-sélectionner le premier indice ---
@@ -253,6 +269,40 @@ void StLaurentDialog::UpdateTimeLabel() {
     wxString label;
     label.Printf("H+%02d  —  %s", ts.stepHours, buf);
     m_lblTime->SetLabel(label);
+}
+
+// ---------------------------------------------------------------------------
+// Mise à jour de la valeur au curseur dans le label à droite de la checkbox
+// Appelé depuis stlaurent_pi::SetCursorLatLon() à chaque déplacement souris.
+// ---------------------------------------------------------------------------
+void StLaurentDialog::UpdateCursorDisplay(int dataIndex, double scalar,
+                                           double dir, bool inGrid) {
+    if (dataIndex < 0 || dataIndex >= (int)m_valueLabels.size()) return;
+    wxStaticText* lbl = m_valueLabels[dataIndex];
+
+    wxString text;
+    if (!inGrid) {
+        text = wxT("—");
+    } else {
+        const auto& data = m_plugin->GetLoadedData();
+        wxString units = (dataIndex < (int)data.size())
+            ? wxString::FromUTF8(data[dataIndex].def.units.c_str())
+            : wxT("");
+
+        text = wxString::Format(wxT("%.2f %s"), scalar, units);
+
+        if (dir >= 0.0) {
+            // Direction de propagation (GRIB + 180°), cohérente avec les flèches
+            double propDeg = fmod(dir + 180.0, 360.0);
+            static const char* dirs[] = {"N","NE","E","SE","S","SO","O","NO"};
+            int idx = (int)(propDeg / 45.0 + 0.5) % 8;
+            text += wxString::Format(wxT("  %s"), wxString::FromUTF8(dirs[idx]));
+        }
+    }
+
+    // Éviter les SetLabel() redondants (appelé à chaque mouvement souris)
+    if (lbl->GetLabel() != text)
+        lbl->SetLabel(text);
 }
 
 // ---------------------------------------------------------------------------

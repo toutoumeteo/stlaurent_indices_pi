@@ -143,8 +143,19 @@ void stlaurent_pi::OnToolbarToolCallback(int id) {
 // Curseur — appelé par OpenCPN à chaque déplacement souris sur la carte
 // ---------------------------------------------------------------------------
 void stlaurent_pi::SetCursorLatLon(double lat, double lon) {
-    if (m_overlayFactory && m_bOverlayVisible)
-        m_overlayFactory->UpdateCursorPosition(lat, lon);
+    if (!m_overlayFactory || !m_bOverlayVisible) return;
+
+    m_overlayFactory->UpdateCursorPosition(lat, lon);
+
+    // Mettre à jour le label de valeur dans le dialog (s'il est ouvert)
+    if (m_dialog) {
+        m_dialog->UpdateCursorDisplay(
+            m_currentIndex,
+            m_overlayFactory->GetCursorScalar(),
+            m_overlayFactory->GetCursorDir(),
+            m_overlayFactory->GetCursorInGrid()
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------

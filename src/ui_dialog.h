@@ -20,6 +20,13 @@ public:
     // Mise à jour de l'interface après chargement d'une run
     void RefreshAfterLoad();
 
+    // Mise à jour des valeurs au curseur dans le dialog
+    // dataIndex : index de l'indice actif (m_currentIndex du plugin)
+    // scalar    : valeur scalaire interpolée
+    // dir       : direction en degrés (-1 = indisponible)
+    // inGrid    : false → afficher "—"
+    void UpdateCursorDisplay(int dataIndex, double scalar, double dir, bool inGrid);
+
 private:
     stlaurent_pi* m_plugin;
 
@@ -31,7 +38,10 @@ private:
     wxStaticText*  m_lblStatus;    // barre de statut
 
     // Une checkbox par indice chargé (recréées à chaque LoadRun)
-    std::vector<wxCheckBox*> m_checkboxes;
+    std::vector<wxCheckBox*>   m_checkboxes;
+
+    // Label de valeur à droite de chaque checkbox (valeur au curseur)
+    std::vector<wxStaticText*> m_valueLabels;
 
     // Handlers
     void OnOpenRun(wxCommandEvent& evt);

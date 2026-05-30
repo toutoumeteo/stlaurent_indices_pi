@@ -48,6 +48,11 @@ public:
     // Appelé depuis stlaurent_pi::SetCursorLatLon()
     void UpdateCursorPosition(double lat, double lon);
 
+    // Accès aux valeurs au curseur — pour mise à jour du dialog
+    bool   GetCursorInGrid()  const { return m_cursorInGrid; }
+    double GetCursorScalar()  const { return m_cursorScalar; }
+    double GetCursorDir()     const { return m_cursorDir; }
+
     // Libère la ressource GL — à appeler depuis DeInit() seulement
     void DestroyTexture();
 
