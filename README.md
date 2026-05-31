@@ -166,6 +166,92 @@ Copier le `.dll` dans le répertoire de plugins OpenCPN, puis activer dans **Opt
 
 ---
 
+## Débogage d'un plantage (Linux)
+
+Si OpenCPN plante (fenêtre « OpenCPN crashed » / proposition d'envoyer un rapport),
+le système conserve **localement** la trace du crash. Ne pas envoyer le rapport à
+OpenCPN : le plantage vient du plugin, pas de leur code. On l'analyse soi-même.
+
+### 1. Le fichier de crash (apport — Ubuntu/Debian)
+
+Sur les systèmes Ubuntu/Debian, le service **apport** capture automatiquement le
+crash (c'est lui qui propose « send report ») et écrit un fichier dans :
+
+```
+/var/crash/_usr_bin_opencpn.<uid>.crash
+```
+
+> `<uid>` = identifiant utilisateur (`1000` pour le premier utilisateur).
+> Le format est `_chemin_de_l_exécutable.<uid>.crash`.
+
+Ce fichier (souvent plusieurs dizaines de Mo) contient le **core dump** complet
+plus des champs lisibles très utiles, extractibles directement avec `grep` :
+
+```bash
+F=/var/crash/_usr_bin_opencpn.1000.crash
+
+# Signal, exécutable, date, paquet
+grep -aE "^(Signal|ExecutablePath|Date|Package):" "$F"
+
+# Pile d'appel (déjà symbolisée par apport)
+grep -aA20 "^Stacktrace:" "$F"
+
+# Cause du segfault + registres (rip, rax… au moment du crash)
+grep -aA4  "^SegvAnalysis:" "$F"
+grep -aA20 "^Registers:"    "$F"
+
+# La memory-map indique où chaque .so est chargé — permet de savoir
+# si une adresse (ex. rax) tombe dans le segment du plugin :
+grep -an "libstlaurent_indices_pi.so" "$F"
+```
+
+**Lecture rapide** : `Signal: 11` = SIGSEGV ; `rip = 0x0` = appel d'un pointeur
+NULL ; une adresse de registre tombant dans le segment *read-only* du plugin
+(zone des vtables) désigne un objet d'une de nos classes.
+
+Pour une pile complète non tronquée, on peut extraire le core et l'ouvrir dans gdb :
+
+```bash
+apport-unpack "$F" /tmp/crash && \
+gdb /usr/bin/opencpn /tmp/crash/CoreDump -batch -ex "thread apply all bt"
+```
+
+### 2. Une fois le crash analysé : supprimer le fichier
+
+Tant qu'il existe, apport propose le rapport à chaque démarrage. Le supprimer :
+
+```bash
+rm -f /var/crash/_usr_bin_opencpn.1000.crash
+```
+
+### 3. Cas du plugin qui « refuse de se charger »
+
+Après un crash au chargement, OpenCPN marque le plugin en échec et refuse de le
+recharger (`Refusing to load … failed at last attempt` dans `~/.opencpn/opencpn.log`).
+Effacer le marqueur d'échec :
+
+```bash
+rm -f ~/.opencpn/load_stamps/libstlaurent_indices_pi
+```
+
+### 4. Cas « rien ne s'ouvre, pas d'erreur »
+
+OpenCPN est en **instance unique**. Un arrêt brutal (`kill -9`, crash) peut laisser
+un verrou orphelin qui fait ressortir tout nouveau lancement silencieusement :
+
+```bash
+pgrep opencpn || rm -f ~/.opencpn/_OpenCPN_SILock
+```
+
+### 5. AddressSanitizer (optionnel)
+
+Pour traquer un débordement mémoire reproductible, compiler avec
+`-DENABLE_ASAN=ON` (voir `CMakeLists.txt`). Sur certaines configurations, le
+préchargement de `libasan` dans OpenCPN se bloque au démarrage ; l'analyse du
+core dump apport (ci-dessus) est alors la méthode la plus fiable.
+
+---
+
 ## Dépendances
 
 - [OpenCPN](https://opencpn.org) 5.x — API plugin `opencpn_plugin_116`
