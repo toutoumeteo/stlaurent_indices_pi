@@ -6,6 +6,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ---------------------------------------------------------------------------
+# Option de diagnostic : AddressSanitizer + UndefinedBehaviorSanitizer
+#   -DENABLE_ASAN=ON  → instrumente le plugin pour détecter débordements,
+#   use-after-free, etc. au moment exact de l'accès fautif.
+#
+#   OpenCPN n'étant pas compilé avec ASan, on précharge la lib au lancement :
+#     ASAN_OPTIONS=halt_on_error=0:log_path=/tmp/asan_stlaurent \
+#     LD_PRELOAD=$(gcc -print-file-name=libasan.so) opencpn
+#
+#   Réservé au debug (Clang/GCC, Linux/macOS) — ne pas activer en production.
+# ---------------------------------------------------------------------------
+option(ENABLE_ASAN "Compiler avec AddressSanitizer + UBSan (debug)" OFF)
+
+# ---------------------------------------------------------------------------
 # Sources
 # ---------------------------------------------------------------------------
 set(SOURCES
@@ -116,6 +129,19 @@ find_package(OpenGL REQUIRED)
 add_library(stlaurent_indices_pi SHARED ${SOURCES})
 
 target_include_directories(stlaurent_indices_pi PRIVATE src/)
+
+# AddressSanitizer / UBSan (debug) — compile ET link
+if(ENABLE_ASAN)
+    if(MSVC)
+        message(WARNING "ENABLE_ASAN non supporté avec MSVC — ignoré.")
+    else()
+        message(STATUS "AddressSanitizer + UBSan ACTIVÉS (build de debug)")
+        target_compile_options(stlaurent_indices_pi PRIVATE
+            -fsanitize=address,undefined -fno-omit-frame-pointer -g)
+        target_link_options(stlaurent_indices_pi PRIVATE
+            -fsanitize=address,undefined)
+    endif()
+endif()
 
 # wxWidgets — headers et définitions de compilation (sans lien sur Unix)
 target_include_directories(stlaurent_indices_pi PRIVATE ${wxWidgets_INCLUDE_DIRS})
