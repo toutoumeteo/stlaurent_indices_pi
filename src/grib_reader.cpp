@@ -178,12 +178,26 @@ bool GribReader::LoadFiles(
     }
 
     if (outData.empty()) {
-        if (filesOpened == 0)
+        if (filesOpened == 0) {
             errMsg = "Aucun fichier lisible.";
-        else
-            errMsg = "Aucun indice reconnu dans les " + std::to_string(messagesSeen)
-                   + " message(s) GRIB lus. Vérifiez que les fichiers contiennent "
-                     "bien les paramètres attendus (discipline/catégorie/numéro).";
+        } else {
+            // Cas particulier : des records de direction ont été reconnus mais
+            // aucun champ scalaire associé. outData étant vide, aucune entrée
+            // n'a été déplacée (move) → work est intact, on peut l'inspecter.
+            bool anyDirection = false;
+            for (const auto& wdata : work)
+                if (!wdata.directionSteps.empty()) { anyDirection = true; break; }
+
+            if (anyDirection)
+                errMsg = "Des données de direction ont été trouvées, mais aucune "
+                         "donnée scalaire (hauteur/indice) correspondante.\n"
+                         "La direction seule ne peut pas être affichée — "
+                         "ajoutez le fichier de l'indice.";
+            else
+                errMsg = "Aucun indice reconnu dans les " + std::to_string(messagesSeen)
+                       + " message(s) GRIB lus. Vérifiez que les fichiers contiennent "
+                         "bien les paramètres attendus (discipline/catégorie/numéro).";
+        }
         return false;
     }
     return true;
