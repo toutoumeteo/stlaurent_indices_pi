@@ -63,8 +63,6 @@ OverlayFactory::OverlayFactory()
     , m_legendTexValid(false)
     , m_legendTexW(0)
     , m_legendTexH(0)
-    , m_cursorLat(0.0)
-    , m_cursorLon(0.0)
     , m_cursorInGrid(false)
     , m_cursorScalar(0.0)
     , m_cursorDir(-1.0)
@@ -238,9 +236,13 @@ void OverlayFactory::BuildTexture() {
                 float t = (float)std::max(0.0, std::min(1.0, (v - vmin)/(vmax - vmin)));
                 unsigned char r, g_c, b, a;
                 ValueToRGBA(t, r, g_c, b, a);
-                buf[idx+0] = r;
-                buf[idx+1] = g_c;
-                buf[idx+2] = b;
+                // Alpha prémultiplié : RGB stockés multipliés par alpha. Combiné
+                // au blend GL_ONE/GL_ONE_MINUS_SRC_ALPHA dans DrawTexture, cela
+                // élimine le liseré sombre aux côtes (interpolation GL_LINEAR
+                // entre un texel coloré et un texel transparent noir).
+                buf[idx+0] = (unsigned char)(r   * a / 255);
+                buf[idx+1] = (unsigned char)(g_c * a / 255);
+                buf[idx+2] = (unsigned char)(b   * a / 255);
                 buf[idx+3] = a;
             }
         }
@@ -278,7 +280,7 @@ void OverlayFactory::BuildTexture() {
 void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
     const GridInfo& g = m_data->grid;
 
-    // Bords ouest et est (longitude → Mercator est linéaire, un seul calcul suffit)
+    // Bords ouest et est de la grille (centres ± une demi-maille)
     double lonW = g.lon(0)        - g.dlon / 2.0;
     double lonE = g.lon(g.ni - 1) + g.dlon / 2.0;
 
@@ -288,24 +290,38 @@ void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
     // Certains plugins (ex: GRIB) laissent GL_TEXTURE_ENV_MODE à GL_REPLACE ou
     // GL_DECAL ce qui ignorerait notre couleur et afficherait la texture opaque.
     glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-    glColor4f(1.0f, 1.0f, 1.0f, 0.75f);  // 75% d'opacité
+
+    // Alpha prémultiplié (cf. BuildTexture) : la texture stocke RGB×alpha.
+    // On module RGB ET alpha par l'opacité globale via glColor4f(A,A,A,A),
+    // puis on additionne avec GL_ONE/GL_ONE_MINUS_SRC_ALPHA.
+    glBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+    const float opacity = 0.75f;
+    glColor4f(opacity, opacity, opacity, opacity);
+
+    // Précalcul des nj+1 latitudes-frontières → pixels ouest/est.
+    // Le bord nord de la rangée j EST le bord sud de la rangée j+1 : chaque
+    // frontière n'est donc projetée qu'une seule fois (≈2×(nj+1) appels à
+    // GetCanvasPixLL au lieu de 4×nj). N'assume aucune projection particulière
+    // (la rotation de carte reste gérée correctement, coin par coin).
+    const int nb = g.nj + 1;
+    std::vector<wxPoint> wpt(nb), ept(nb);  // bords ouest / est de chaque frontière
+    const double latBase = g.lat(0) - g.dlat / 2.0;
+    for (int b = 0; b < nb; ++b) {
+        double lat = latBase + b * g.dlat;
+        GetCanvasPixLL(vp, &wpt[b], lat, lonW);
+        GetCanvasPixLL(vp, &ept[b], lat, lonE);
+    }
 
     glBegin(GL_QUADS);
     for (int j = 0; j < g.nj; ++j) {
-        // Bords sud et nord exacts de cette rangée de cellules GRIB
-        double rowLatS = g.lat(j) - g.dlat / 2.0;
-        double rowLatN = g.lat(j) + g.dlat / 2.0;
-
         // Coordonnées texture verticales : j=0 → bas (t=0), j=nj-1 → haut (t=1)
-        float tv0 = (float)j       / (float)g.nj;  // bord sud de la rangée j
-        float tv1 = (float)(j + 1) / (float)g.nj;  // bord nord de la rangée j
+        float tv0 = (float)j       / (float)g.nj;
+        float tv1 = (float)(j + 1) / (float)g.nj;
 
-        // Conversion géo → pixels écran pour cette bande
-        wxPoint sw, se, ne, nw;
-        GetCanvasPixLL(vp, &sw, rowLatS, lonW);
-        GetCanvasPixLL(vp, &se, rowLatS, lonE);
-        GetCanvasPixLL(vp, &ne, rowLatN, lonE);
-        GetCanvasPixLL(vp, &nw, rowLatN, lonW);
+        const wxPoint& sw = wpt[j];      // sud-ouest
+        const wxPoint& se = ept[j];      // sud-est
+        const wxPoint& nw = wpt[j + 1];  // nord-ouest
+        const wxPoint& ne = ept[j + 1];  // nord-est
 
         glTexCoord2f(0.0f, tv0);  glVertex2i(sw.x, sw.y);
         glTexCoord2f(1.0f, tv0);  glVertex2i(se.x, se.y);
@@ -313,6 +329,9 @@ void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
         glTexCoord2f(0.0f, tv1);  glVertex2i(nw.x, nw.y);
     }
     glEnd();
+
+    // Restaurer le blend standard pour les flèches et la légende
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
     glBindTexture(GL_TEXTURE_2D, 0);
     glDisable(GL_TEXTURE_2D);
@@ -326,8 +345,16 @@ void OverlayFactory::BuildLegendTexture() {
     if (!m_data) return;
     const IndexDefinition& def = m_data->def;
 
-    // Dimensions de la légende en pixels
-    const int W = 210, H = 65;
+    // Facteur d'échelle HiDPI : sur écran Retina/4K, GetContentScaleFactor()
+    // renvoie ~2.0 → la légende garde une taille physique constante. Sur
+    // Windows et écran standard, il renvoie 1.0 (aucun changement).
+    double scale = 1.0;
+    if (wxWindow* cw = GetOCPNCanvasWindow())
+        scale = std::max(1.0, std::min(4.0, (double)cw->GetContentScaleFactor()));
+    auto S = [scale](int v) { return (int)std::lround(v * scale); };
+
+    // Dimensions de la légende en pixels (mises à l'échelle)
+    const int W = S(210), H = S(65);
     m_legendTexW = W;
     m_legendTexH = H;
 
@@ -339,16 +366,18 @@ void OverlayFactory::BuildLegendTexture() {
         dc.SetBackground(wxBrush(wxColour(25, 25, 25)));
         dc.Clear();
 
+        const int fontPt = S(8);
+
         // Titre : "Indice d'agitation [-]"
         wxString title = wxString::FromUTF8(def.displayName.c_str())
                        + wxT(" [") + wxString::FromUTF8(def.units.c_str()) + wxT("]");
-        dc.SetFont(wxFont(8, wxFONTFAMILY_DEFAULT,
+        dc.SetFont(wxFont(fontPt, wxFONTFAMILY_DEFAULT,
                           wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD));
         dc.SetTextForeground(wxColour(230, 230, 230));
-        dc.DrawText(title, 8, 5);
+        dc.DrawText(title, S(8), S(5));
 
         // Barre de couleur (même palette que l'overlay)
-        const int barX = 8, barY = 23, barW = W - 16, barH = 18;
+        const int barX = S(8), barY = S(23), barW = W - 2 * barX, barH = S(18);
         for (int x = 0; x < barW; ++x) {
             float t = (float)x / (float)(barW - 1);
             unsigned char r, g, b, a;
@@ -362,14 +391,15 @@ void OverlayFactory::BuildLegendTexture() {
         dc.DrawRectangle(barX, barY, barW, barH);
 
         // Valeurs min et max sous la barre
-        dc.SetFont(wxFont(8, wxFONTFAMILY_DEFAULT,
+        dc.SetFont(wxFont(fontPt, wxFONTFAMILY_DEFAULT,
                           wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
         dc.SetTextForeground(wxColour(200, 200, 200));
         wxString minStr = wxString::Format(wxT("%.1f"), def.minValue);
         wxString maxStr = wxString::Format(wxT("%.1f"), def.maxValue);
-        dc.DrawText(minStr, barX, barY + barH + 3);
+        const int textY = barY + barH + S(3);
+        dc.DrawText(minStr, barX, textY);
         wxSize maxSz = dc.GetTextExtent(maxStr);
-        dc.DrawText(maxStr, barX + barW - maxSz.x, barY + barH + 3);
+        dc.DrawText(maxStr, barX + barW - maxSz.x, textY);
 
     }  // dc libéré ici → SelectObject(wxNullBitmap) implicite
 
@@ -434,8 +464,6 @@ void OverlayFactory::UpdateCursorPosition(double lat, double lon) {
 
     const GridInfo& g = m_data->grid;
     int i, j;
-    m_cursorLat = lat;
-    m_cursorLon = lon;
 
     if (!g.toIndex(lon, lat, i, j)) {
         m_cursorInGrid = false;
@@ -475,6 +503,7 @@ void OverlayFactory::UpdateCursorPosition(double lat, double lon) {
 void OverlayFactory::DrawArrows(PlugIn_ViewPort* vp) {
     const GridInfo& g   = m_data->grid;
     const TimeStep& dir = m_data->directionSteps[m_stepIndex];
+    const TimeStep& sc  = m_data->scalarSteps[m_stepIndex];
 
     // Espacement des flèches : environ 1 flèche tous les 30 pixels
     // On calcule l'espacement en points de grille
@@ -494,7 +523,6 @@ void OverlayFactory::DrawArrows(PlugIn_ViewPort* vp) {
     for (int j = grid_step/2; j < g.nj; j += grid_step) {
         for (int i = grid_step/2; i < g.ni; i += grid_step) {
             // Vérifier que la valeur scalaire n'est pas manquante
-            const TimeStep& sc = m_data->scalarSteps[m_stepIndex];
             if (sc.isMissing(i, j, g)) continue;
 
             double dir_deg = dir.get(i, j, g);
@@ -582,8 +610,11 @@ void OverlayFactory::ValueToRGBA(float t,
         b_f = 0.0f;
     }
 
-    r = (unsigned char)(r_f * 255);
-    g = (unsigned char)(g_f * 255);
-    b = (unsigned char)(b_f * 255);
-    a = 200;  // semi-transparent
+    // Arrondi (+0.5) plutôt que troncature
+    r = (unsigned char)(r_f * 255.0f + 0.5f);
+    g = (unsigned char)(g_f * 255.0f + 0.5f);
+    b = (unsigned char)(b_f * 255.0f + 0.5f);
+    // Opaque : la transparence de l'overlay est pilotée par glColor4f dans
+    // DrawTexture, pas par la couleur de palette (évite la double opacité).
+    a = 255;
 }

@@ -77,9 +77,7 @@ private:
     int    m_legendTexW;
     int    m_legendTexH;
 
-    // --- Curseur : position et valeurs interpolées ---
-    double m_cursorLat;
-    double m_cursorLon;
+    // --- Curseur : valeurs interpolées ---
     bool   m_cursorInGrid;    // curseur sur la grille ET valeur non-manquante
     double m_cursorScalar;    // valeur scalaire au point curseur
     double m_cursorDir;       // direction au point curseur (-1 = indisponible)
