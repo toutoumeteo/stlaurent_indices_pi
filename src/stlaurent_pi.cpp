@@ -86,8 +86,15 @@ bool stlaurent_pi::DeInit() {
         m_overlayFactory->DestroyTexture();
 
     if (m_dialog) {
+        // Destruction SYNCHRONE (delete), pas Destroy() qui diffère la
+        // destruction au prochain cycle idle. Après DeInit(), OpenCPN décharge
+        // le .so (dlclose) : si le dialog survivait dans wxPendingDelete, wx lui
+        // enverrait un événement idle via une vtable désormais dans du code
+        // démappé → appel d'un pointeur NULL → SIGSEGV (crash observé).
+        // delete exécute ~StLaurentDialog et retire le dialog de la hiérarchie
+        // de fenêtres immédiatement, tant que le code du plugin est mappé.
         m_dialog->Hide();
-        m_dialog->Destroy();
+        delete m_dialog;
         m_dialog = nullptr;
     }
     RemovePlugInTool(m_toolbar_item_id);
