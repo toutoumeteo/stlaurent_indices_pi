@@ -463,15 +463,22 @@ void OverlayFactory::UpdateCursorPosition(double lat, double lon) {
     }
 
     const GridInfo& g = m_data->grid;
-    int i, j;
+    const TimeStep& scalar = m_data->scalarSteps[m_stepIndex];
 
+    // Garde-fou : tableau incohérent avec la grille → ne rien indexer
+    if (!scalar.matchesGrid(g)) {
+        m_cursorInGrid = false;
+        return;
+    }
+
+    int i, j;
     if (!g.toIndex(lon, lat, i, j)) {
         m_cursorInGrid = false;
         return;
     }
 
     // Valeur scalaire — si manquante (terre/no-data), pas d'affichage
-    double val = m_data->scalarSteps[m_stepIndex].get(i, j, g);
+    double val = scalar.get(i, j, g);
     if (val >= TimeStep::MISSING_VALUE - 1.0) {
         m_cursorInGrid = false;
         return;
@@ -487,13 +494,15 @@ void OverlayFactory::UpdateCursorPosition(double lat, double lon) {
     m_cursorGridJ  = j;
     m_cursorScalar = val;
 
-    // Direction (si disponible)
+    // Direction (si disponible et cohérente avec la grille)
+    m_cursorDir = -1.0;
     if (m_data->hasDirection() &&
         m_stepIndex < (int)m_data->directionSteps.size()) {
-        double d = m_data->directionSteps[m_stepIndex].get(i, j, g);
-        m_cursorDir = (d < TimeStep::MISSING_VALUE - 1.0) ? d : -1.0;
-    } else {
-        m_cursorDir = -1.0;
+        const TimeStep& dir = m_data->directionSteps[m_stepIndex];
+        if (dir.matchesGrid(g)) {
+            double d = dir.get(i, j, g);
+            if (d < TimeStep::MISSING_VALUE - 1.0) m_cursorDir = d;
+        }
     }
 }
 
@@ -504,6 +513,9 @@ void OverlayFactory::DrawArrows(PlugIn_ViewPort* vp) {
     const GridInfo& g   = m_data->grid;
     const TimeStep& dir = m_data->directionSteps[m_stepIndex];
     const TimeStep& sc  = m_data->scalarSteps[m_stepIndex];
+
+    // Garde-fou : ne pas itérer si un tableau ne correspond pas à la grille
+    if (!dir.matchesGrid(g) || !sc.matchesGrid(g)) return;
 
     // Espacement des flèches : environ 1 flèche tous les 30 pixels
     // On calcule l'espacement en points de grille

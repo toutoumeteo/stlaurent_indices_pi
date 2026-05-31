@@ -240,6 +240,18 @@ bool GribReader::ReadOneFile(
     // --- Lire les valeurs ---
     size_t count = 0;
     codes_get_size(h, "values", &count);
+
+    // Rejeter tout message dont la taille ne correspond pas à la grille de
+    // référence. Garantit que chaque pas de temps stocké a exactement ni*nj
+    // valeurs → sécurise les accès indexés (rendu, flèches, curseur).
+    if (outGrid.isValid() && (int)count != outGrid.ni * outGrid.nj) {
+        errMsg = "Taille de grille incohérente (" + std::to_string(count)
+               + " != " + std::to_string(outGrid.ni * outGrid.nj)
+               + ") dans: " + filePath;
+        codes_handle_delete(h);
+        return false;
+    }
+
     outStep.values.resize(count);
     codes_get_double_array(h, "values", outStep.values.data(), &count);
 

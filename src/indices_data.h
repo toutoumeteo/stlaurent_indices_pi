@@ -54,6 +54,12 @@ struct TimeStep {
 
     static constexpr double MISSING_VALUE = 9999.0;
 
+    // Vrai si le tableau de valeurs correspond exactement à la grille.
+    // À vérifier avant toute boucle indexée (garde-fou anti-débordement).
+    bool matchesGrid(const GridInfo& g) const {
+        return (int)values.size() == g.ni * g.nj;
+    }
+
     bool isMissing(int i, int j, const GridInfo& g) const {
         return values[g.idx(i, j)] >= MISSING_VALUE - 1.0;
     }
