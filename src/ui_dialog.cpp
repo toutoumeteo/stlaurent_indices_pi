@@ -7,7 +7,7 @@
 #include "stlaurent_pi.h"
 #include "indices_data.h"
 
-#include <wx/dirdlg.h>
+#include <wx/filedlg.h>
 #include <wx/statline.h>
 #include <ctime>
 #include <iomanip>
@@ -40,8 +40,9 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
     wxBoxSizer* row;
 
     // --- Bouton ouvrir ---
-    m_btnOpen = new wxButton(this, wxID_OPEN, _("Choisir dossier de run..."));
-    m_btnOpen->SetToolTip(_("Sélectionner le dossier de la run\n(ex: .../data/2026052518/)"));
+    m_btnOpen = new wxButton(this, wxID_OPEN, _("Choisir fichier(s) GRIB…"));
+    m_btnOpen->SetToolTip(_("Sélectionner un ou plusieurs fichiers GRIB2.\n"
+                            "Les records non pertinents sont ignorés."));
     mainSizer->Add(m_btnOpen, 0, wxALL | wxEXPAND, 6);
 
     // --- Séparateur ---
@@ -96,22 +97,27 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
 }
 
 // ---------------------------------------------------------------------------
-// Ouvrir un répertoire de run
+// Ouvrir un ou plusieurs fichiers GRIB2
 // ---------------------------------------------------------------------------
 void StLaurentDialog::OnOpenRun(wxCommandEvent& /*evt*/) {
-    wxDirDialog dlg(this,
-                    _("Choisir le dossier de la run\n"
-                      "(ex: .../data/2026052518/  — sélectionnez le dossier, pas les fichiers)"),
-                    wxEmptyString,
-                    wxDD_DEFAULT_STYLE | wxDD_DIR_MUST_EXIST);
+    wxFileDialog dlg(this,
+                     _("Choisir un ou plusieurs fichiers GRIB2"),
+                     wxEmptyString, wxEmptyString,
+                     _("Fichiers GRIB (*.grib2;*.grb2;*.grib;*.grb)"
+                       "|*.grib2;*.grb2;*.grib;*.grb"
+                       "|Tous les fichiers (*.*)|*.*"),
+                     wxFD_OPEN | wxFD_MULTIPLE | wxFD_FILE_MUST_EXIST);
     if (dlg.ShowModal() != wxID_OK) return;
 
-    wxString runDir = dlg.GetPath();
+    wxArrayString paths;
+    dlg.GetPaths(paths);
+    if (paths.IsEmpty()) return;
+
     m_lblStatus->SetLabel(_("Chargement en cours..."));
     Update();
 
     wxString errMsg;
-    bool ok = m_plugin->LoadRun(runDir, errMsg);
+    bool ok = m_plugin->LoadFiles(paths, errMsg);
 
     if (!ok) {
         m_lblStatus->SetLabel(errMsg);
@@ -169,7 +175,7 @@ void StLaurentDialog::RefreshAfterLoad() {
     if (!m_checkboxes.empty()) {
         m_checkboxes[0]->SetValue(true);
         m_plugin->SetDisplayIndex(0);
-        // m_bOverlayVisible est déjà true (mis par LoadRun)
+        // m_bOverlayVisible est déjà true (mis par LoadFiles)
 
         int nSteps = (int)data[0].scalarSteps.size();
         if (nSteps > 0) {

@@ -25,18 +25,18 @@ Plugin [OpenCPN](https://opencpn.org) pour l'affichage des indices météo-marin
 
 ## Structure des fichiers de données
 
-Le plugin attend la structure de répertoires produite par ECCC :
+Le plugin lit directement des fichiers GRIB2 (extension `.grib2`, `.grb2`,
+`.grib` ou `.grb`). **Aucune structure de répertoires particulière n'est
+requise** : l'utilisateur choisit les fichiers eux-mêmes.
 
-```
-<run>/                              ← ex: 2026052518/
-├── Indice_agitation_RDWPS/
-│   ├── CMC_rdwps_..._PT001H.grib2
-│   ├── CMC_rdwps_..._PT002H.grib2
-│   └── ...  (48 fichiers)
-└── Direction_agitation_RDWPS/
-    ├── CMC_rdwps_..._PT001H.grib2
-    └── ...
-```
+Un fichier peut contenir :
+- **un seul** record (une échéance d'un indice), ou
+- **plusieurs** records mélangés (plusieurs échéances, plusieurs paramètres,
+  voire des champs non pertinents comme le vent ou la température).
+
+Les pas de temps sont reconstitués à partir du `validTime` de chaque record
+retenu ; sélectionner plusieurs fichiers les regroupe automatiquement (les
+doublons de `validTime` sont éliminés).
 
 ---
 
@@ -159,10 +159,15 @@ Copier le `.dll` dans le répertoire de plugins OpenCPN, puis activer dans **Opt
 ## Utilisation
 
 1. Cliquer sur le bouton **SL** dans la barre d'outils OpenCPN
-2. Dans la fenêtre qui s'ouvre, cliquer sur **Choisir dossier de run…**
-3. Sélectionner le **dossier de la run** (ex: `2026052518/`) — pas un sous-dossier
+2. Dans la fenêtre qui s'ouvre, cliquer sur **Choisir fichier(s) GRIB…**
+3. Sélectionner **un ou plusieurs fichiers GRIB2** (sélection multiple possible)
 4. Une fois les données chargées, la carte de couleurs s'affiche sur la carte nautique
-5. Utiliser le sélecteur de **pas de temps** pour naviguer entre les 48 heures de prévision
+5. Utiliser le sélecteur de **pas de temps** pour naviguer entre les échéances
+
+> Chaque fichier peut contenir plusieurs records (vent, température, indices…).
+> Le plugin ne lit que les records dont la **discipline / catégorie / numéro de
+> paramètre** correspondent aux indices du catalogue ; tous les autres sont
+> ignorés, exactement comme le plugin GRIB natif.
 
 ---
 

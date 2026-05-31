@@ -7,19 +7,12 @@
 #include <eccodes.h>
 
 #include <algorithm>
-#include <cstring>
 #include <cstdio>
 #include <ctime>
-#include <filesystem>   // C++17 — remplace dirent.h (cross-platform)
-#include <stdexcept>
-
-namespace fs = std::filesystem;
 
 // ---------------------------------------------------------------------------
 // timegm : interprète struct tm comme UTC et retourne time_t
-//   POSIX/Linux : timegm() disponible
-//   Windows     : _mkgmtime() (même sémantique)
-//   macOS       : timegm() disponible (BSD extension)
+//   POSIX/Linux/macOS : timegm()   |   Windows : _mkgmtime()
 // ---------------------------------------------------------------------------
 #ifdef _WIN32
     static time_t portable_timegm(struct tm* t) { return _mkgmtime(t); }
@@ -28,208 +21,52 @@ namespace fs = std::filesystem;
 #endif
 
 // ---------------------------------------------------------------------------
-// Interface principale
+// Lecture de la grille depuis un message
 // ---------------------------------------------------------------------------
-bool GribReader::LoadIndex(
-    const std::string&     runDir,
-    const IndexDefinition& def,
-    IndexData&             outData,
-    std::string&           errMsg
-) {
-    outData.def = def;
+bool GribReader::readGridFromHandle(codes_handle* h, GridInfo& outGrid) {
+    long ni, nj;
+    if (codes_get_long(h, "Ni", &ni) != 0) return false;
+    if (codes_get_long(h, "Nj", &nj) != 0) return false;
 
-    // --- Charger les pas de temps scalaires ---
-    std::string scalarDir = buildSubDir(runDir, def.dirSearchString);
-    std::vector<std::string> scalarFiles = listGribFiles(scalarDir, errMsg);
-    if (scalarFiles.empty()) {
-        errMsg = "Aucun fichier GRIB2 dans: " + scalarDir;
-        return false;
-    }
+    double lat0, lon0, latN, lonN, dlat, dlon;
+    codes_get_double(h, "latitudeOfFirstGridPointInDegrees",  &lat0);
+    codes_get_double(h, "longitudeOfFirstGridPointInDegrees", &lon0);
+    codes_get_double(h, "latitudeOfLastGridPointInDegrees",   &latN);
+    codes_get_double(h, "longitudeOfLastGridPointInDegrees",  &lonN);
+    codes_get_double(h, "iDirectionIncrementInDegrees",       &dlon);
+    codes_get_double(h, "jDirectionIncrementInDegrees",       &dlat);
 
-    bool gridInitialized = false;
-    for (const auto& path : scalarFiles) {
-        TimeStep step;
-        std::string localErr;
-        if (ReadOneFile(path, def.parameterNumber, outData.grid, step, localErr)) {
-            outData.scalarSteps.push_back(std::move(step));
-            gridInitialized = true;
-        } else {
-            // Fichier illisible ou mauvais paramètre — on continue
-        }
-    }
+    // jScansPositively=1 → lat0 est le coin SUD ; sinon lat0 = coin NORD
+    long jScansPositively = 1;
+    codes_get_long(h, "jScansPositively", &jScansPositively);
 
-    if (!gridInitialized || outData.scalarSteps.empty()) {
-        errMsg = "Aucun pas de temps valide pour paramètre "
-                 + std::to_string(def.parameterNumber)
-                 + " dans " + scalarDir;
-        return false;
-    }
+    outGrid.ni   = (int)ni;
+    outGrid.nj   = (int)nj;
+    outGrid.dlon = dlon;
+    outGrid.dlat = dlat;
+    outGrid.lon0 = normLon(lon0);
+    outGrid.lat0 = jScansPositively ? lat0 : latN;  // toujours le coin sud
 
-    // Tri par stepHours croissant
-    std::sort(outData.scalarSteps.begin(), outData.scalarSteps.end(),
-              [](const TimeStep& a, const TimeStep& b) {
-                  return a.stepHours < b.stepHours;
-              });
-
-    // --- Charger les pas de temps directionnels (optionnel) ---
-    if (def.directionParamNumber >= 0 && !def.dirDirSearchString.empty()) {
-        std::string dirDir = buildSubDir(runDir, def.dirDirSearchString);
-        std::vector<std::string> dirFiles = listGribFiles(dirDir, errMsg);
-
-        GridInfo dirGrid;  // non utilisé (devrait être identique à outData.grid)
-        for (const auto& path : dirFiles) {
-            TimeStep step;
-            std::string localErr;
-            if (ReadOneFile(path, def.directionParamNumber, dirGrid, step, localErr)) {
-                outData.directionSteps.push_back(std::move(step));
-            }
-        }
-
-        std::sort(outData.directionSteps.begin(), outData.directionSteps.end(),
-                  [](const TimeStep& a, const TimeStep& b) {
-                      return a.stepHours < b.stepHours;
-                  });
-    }
-
-    return true;
+    return outGrid.isValid();
 }
 
 // ---------------------------------------------------------------------------
-// Construction du sous-répertoire
-// Cherche le premier répertoire dont le nom contient shortName dans runDir
-// ex: runDir="data/2026052518/", shortName="Indice_agitation"
-//     → "data/2026052518/Indice_agitation_RDWPS/"
+// Lecture de l'horodatage et des valeurs d'un message
 // ---------------------------------------------------------------------------
-std::string GribReader::buildSubDir(
-    const std::string& runDir,
-    const std::string& shortName
-) {
-    std::error_code ec;
-    for (const auto& entry : fs::directory_iterator(runDir, ec)) {
-        if (!entry.is_directory(ec)) continue;
-        std::string name = entry.path().filename().string();
-        if (name.find(shortName) != std::string::npos)
-            return entry.path().string() + "/";
-    }
-    // Fallback: convention directe
-    return runDir + "/" + shortName + "/";
-}
-
-// ---------------------------------------------------------------------------
-// Liste des fichiers .grib2 / .grb2 d'un répertoire, triés par nom
-// ---------------------------------------------------------------------------
-std::vector<std::string> GribReader::listGribFiles(
-    const std::string& dir,
-    std::string&       errMsg
-) {
-    std::vector<std::string> result;
-    std::error_code ec;
-    for (const auto& entry : fs::directory_iterator(dir, ec)) {
-        if (!entry.is_regular_file(ec)) continue;
-        std::string ext = entry.path().extension().string();
-        if (ext == ".grib2" || ext == ".grb2")
-            result.push_back(entry.path().string());
-    }
-    if (ec) {
-        errMsg = "Répertoire introuvable: " + dir;
-    }
-    std::sort(result.begin(), result.end());
-    return result;
-}
-
-// ---------------------------------------------------------------------------
-// Lecture d'un fichier GRIB2 à message unique via ecCodes
-// ---------------------------------------------------------------------------
-bool GribReader::ReadOneFile(
-    const std::string& filePath,
-    int                expectedParamNumber,
-    GridInfo&          outGrid,
-    TimeStep&          outStep,
-    std::string&       errMsg
-) {
-    FILE* f = fopen(filePath.c_str(), "rb");
-    if (!f) {
-        errMsg = "Impossible d'ouvrir: " + filePath;
-        return false;
-    }
-
-    int err = 0;
-    codes_handle* h = codes_handle_new_from_file(nullptr, f, PRODUCT_GRIB, &err);
-    fclose(f);
-
-    if (!h || err != 0) {
-        errMsg = "Erreur ecCodes lecture: " + filePath;
-        if (h) codes_handle_delete(h);
-        return false;
-    }
-
-    // --- Vérifier discipline/category/parameterNumber ---
-    long discipline, category, paramNum;
-    codes_get_long(h, "discipline",        &discipline);
-    codes_get_long(h, "parameterCategory", &category);
-    codes_get_long(h, "parameterNumber",   &paramNum);
-
-    if ((int)paramNum != expectedParamNumber) {
-        errMsg = "Paramètre inattendu " + std::to_string(paramNum)
-                 + " (attendu " + std::to_string(expectedParamNumber) + ")";
-        codes_handle_delete(h);
-        return false;
-    }
-
-    // --- Lire la grille (seulement si pas encore initialisée) ---
-    if (!outGrid.isValid()) {
-        long ni, nj;
-        codes_get_long(h, "Ni", &ni);
-        codes_get_long(h, "Nj", &nj);
-
-        double lat0, lon0, latN, lonN, dlat, dlon;
-        codes_get_double(h, "latitudeOfFirstGridPointInDegrees",  &lat0);
-        codes_get_double(h, "longitudeOfFirstGridPointInDegrees", &lon0);
-        codes_get_double(h, "latitudeOfLastGridPointInDegrees",   &latN);
-        codes_get_double(h, "longitudeOfLastGridPointInDegrees",  &lonN);
-        codes_get_double(h, "iDirectionIncrementInDegrees",       &dlon);
-        codes_get_double(h, "jDirectionIncrementInDegrees",       &dlat);
-
-        // jScansPositively=1 → lat0 est le coin SUD
-        // Sinon (0) → lat0 est le coin NORD, on réordonne
-        long jScansPositively = 1;
-        codes_get_long(h, "jScansPositively", &jScansPositively);
-
-        outGrid.ni   = (int)ni;
-        outGrid.nj   = (int)nj;
-        outGrid.dlon = dlon;
-        outGrid.dlat = dlat;
-
-        // Normaliser longitude en -180/+180
-        double lon0_norm = normLon(lon0);
-
-        if (jScansPositively) {
-            // Premier point = coin SW : OK
-            outGrid.lat0 = lat0;
-            outGrid.lon0 = lon0_norm;
-        } else {
-            // Premier point = coin NW → ajuster lat0 au sud
-            outGrid.lat0 = latN;
-            outGrid.lon0 = lon0_norm;
-        }
-    }
-
-    // --- Lire les temps ---
-    long dataDate, dataTime, stepHours;
+bool GribReader::readStepFromHandle(codes_handle* h, const GridInfo& grid,
+                                    TimeStep& outStep) {
+    long dataDate, dataTime, stepHours = 0;
     codes_get_long(h, "dataDate", &dataDate);
     codes_get_long(h, "dataTime", &dataTime);
+    codes_get_long(h, "endStep",  &stepHours);
 
-    // stepRange peut être un entier ou une chaîne selon le template PDS
-    codes_get_long(h, "endStep", &stepHours);
-
-    // Construire refTime (time_t) depuis dataDate (YYYYMMDD) et dataTime (HHMM)
     struct tm refTm = {};
-    refTm.tm_year = (int)(dataDate / 10000) - 1900;
-    refTm.tm_mon  = (int)(dataDate / 100 % 100) - 1;
-    refTm.tm_mday = (int)(dataDate % 100);
-    refTm.tm_hour = (int)(dataTime / 100);
-    refTm.tm_min  = (int)(dataTime % 100);
-    refTm.tm_sec  = 0;
+    refTm.tm_year  = (int)(dataDate / 10000) - 1900;
+    refTm.tm_mon   = (int)(dataDate / 100 % 100) - 1;
+    refTm.tm_mday  = (int)(dataDate % 100);
+    refTm.tm_hour  = (int)(dataTime / 100);
+    refTm.tm_min   = (int)(dataTime % 100);
+    refTm.tm_sec   = 0;
     refTm.tm_isdst = 0;
     time_t refTime = portable_timegm(&refTm);
 
@@ -237,46 +74,117 @@ bool GribReader::ReadOneFile(
     outStep.stepHours = (int)stepHours;
     outStep.validTime = refTime + (time_t)stepHours * 3600;
 
-    // --- Lire les valeurs ---
     size_t count = 0;
     codes_get_size(h, "values", &count);
 
-    // Rejeter tout message dont la taille ne correspond pas à la grille de
-    // référence. Garantit que chaque pas de temps stocké a exactement ni*nj
-    // valeurs → sécurise les accès indexés (rendu, flèches, curseur).
-    if (outGrid.isValid() && (int)count != outGrid.ni * outGrid.nj) {
-        errMsg = "Taille de grille incohérente (" + std::to_string(count)
-               + " != " + std::to_string(outGrid.ni * outGrid.nj)
-               + ") dans: " + filePath;
-        codes_handle_delete(h);
-        return false;
-    }
+    // Sécurité : la taille doit correspondre à la grille de référence,
+    // sinon on ignore ce message (sécurise les accès indexés ailleurs).
+    if ((int)count != grid.ni * grid.nj) return false;
 
     outStep.values.resize(count);
-    codes_get_double_array(h, "values", outStep.values.data(), &count);
+    if (codes_get_double_array(h, "values", outStep.values.data(), &count) != 0)
+        return false;
 
-    // Note: si jScansPositively=0, les données sont stockées N→S.
-    // On pourrait les réordonner ici, mais nos fichiers ont jScansPositively=1.
-    // TODO: gérer le cas jScansPositively=0 si nécessaire.
-
-    codes_handle_delete(h);
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// Extraction de stepHours depuis le nom de fichier
-// ex: "...PT024H.grib2" → 24
+// Ajout avec déduplication par validTime
 // ---------------------------------------------------------------------------
-int GribReader::stepFromFilename(const std::string& filename) {
-    // Chercher le pattern "PT" suivi de chiffres suivi de "H"
-    size_t pos = filename.rfind("_PT");
-    if (pos == std::string::npos) return -1;
-    pos += 3;  // sauter "_PT"
-    size_t end = filename.find('H', pos);
-    if (end == std::string::npos) return -1;
-    try {
-        return std::stoi(filename.substr(pos, end - pos));
-    } catch (...) {
-        return -1;
+void GribReader::addStepDedup(std::vector<TimeStep>& steps, TimeStep&& step) {
+    for (const auto& s : steps) {
+        if (s.validTime == step.validTime) return;  // déjà présent
     }
+    steps.push_back(std::move(step));
+}
+
+// ---------------------------------------------------------------------------
+// Interface principale : lecture multi-fichiers / multi-messages
+// ---------------------------------------------------------------------------
+bool GribReader::LoadFiles(
+    const std::vector<std::string>&     files,
+    const std::vector<IndexDefinition>& catalogue,
+    std::vector<IndexData>&             outData,
+    std::string&                        errMsg
+) {
+    outData.clear();
+    if (files.empty()) { errMsg = "Aucun fichier sélectionné."; return false; }
+    if (catalogue.empty()) { errMsg = "Catalogue d'indices vide."; return false; }
+
+    // Table de travail : un IndexData par définition du catalogue
+    std::vector<IndexData> work(catalogue.size());
+    for (size_t k = 0; k < catalogue.size(); ++k)
+        work[k].def = catalogue[k];
+
+    int filesOpened = 0;
+    long messagesSeen = 0;
+
+    for (const auto& path : files) {
+        FILE* f = fopen(path.c_str(), "rb");
+        if (!f) continue;  // fichier illisible — on passe au suivant
+        ++filesOpened;
+
+        int err = 0;
+        codes_handle* h = nullptr;
+        // Boucle sur TOUS les messages du fichier
+        while ((h = codes_handle_new_from_file(nullptr, f, PRODUCT_GRIB, &err))
+               != nullptr) {
+            ++messagesSeen;
+
+            long disc = -1, cat = -1, num = -1;
+            codes_get_long(h, "discipline",        &disc);
+            codes_get_long(h, "parameterCategory", &cat);
+            codes_get_long(h, "parameterNumber",   &num);
+
+            // Chercher une correspondance dans le catalogue.
+            // Match sur les 3 clés → évite de confondre p.ex. le vent
+            // (discipline 0) avec une vague (discipline 10).
+            for (size_t k = 0; k < catalogue.size(); ++k) {
+                const IndexDefinition& d = catalogue[k];
+                bool sameParam = (disc == d.discipline &&
+                                  cat  == d.parameterCategory);
+                bool isScalar = sameParam && (num == d.parameterNumber);
+                bool isDir    = sameParam && (d.directionParamNumber >= 0) &&
+                                (num == d.directionParamNumber);
+                if (!isScalar && !isDir) continue;
+
+                // Grille : lue au premier message retenu pour cet indice
+                if (!work[k].grid.isValid()) {
+                    if (!readGridFromHandle(h, work[k].grid)) break;
+                }
+
+                TimeStep step;
+                if (readStepFromHandle(h, work[k].grid, step)) {
+                    if (isScalar) addStepDedup(work[k].scalarSteps, std::move(step));
+                    else          addStepDedup(work[k].directionSteps, std::move(step));
+                }
+                break;  // un message ne correspond qu'à un seul indice
+            }
+
+            codes_handle_delete(h);
+        }
+        fclose(f);
+    }
+
+    // Tri par validTime + ne conserver que les indices avec données scalaires
+    auto byValidTime = [](const TimeStep& a, const TimeStep& b) {
+        return a.validTime < b.validTime;
+    };
+    for (auto& wdata : work) {
+        if (wdata.scalarSteps.empty()) continue;  // indice absent des fichiers
+        std::sort(wdata.scalarSteps.begin(),    wdata.scalarSteps.end(),    byValidTime);
+        std::sort(wdata.directionSteps.begin(), wdata.directionSteps.end(), byValidTime);
+        outData.push_back(std::move(wdata));
+    }
+
+    if (outData.empty()) {
+        if (filesOpened == 0)
+            errMsg = "Aucun fichier lisible.";
+        else
+            errMsg = "Aucun indice reconnu dans les " + std::to_string(messagesSeen)
+                   + " message(s) GRIB lus. Vérifiez que les fichiers contiennent "
+                     "bien les paramètres attendus (discipline/catégorie/numéro).";
+        return false;
+    }
+    return true;
 }

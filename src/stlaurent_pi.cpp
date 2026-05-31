@@ -166,9 +166,9 @@ void stlaurent_pi::SetCursorLatLon(double lat, double lon) {
 }
 
 // ---------------------------------------------------------------------------
-// Chargement d'une run
+// Chargement d'un ou plusieurs fichiers GRIB2
 // ---------------------------------------------------------------------------
-bool stlaurent_pi::LoadRun(const wxString& runDir, wxString& errMsg) {
+bool stlaurent_pi::LoadFiles(const wxArrayString& paths, wxString& errMsg) {
     // Réinitialiser m_data AVANT clear() pour éviter un pointeur dangling :
     // m_overlayFactory->m_data pointe dans m_loadedData ; si un événement GL
     // se produit après clear() mais avant UpdateOverlay(), BuildTexture()
@@ -179,31 +179,15 @@ bool stlaurent_pi::LoadRun(const wxString& runDir, wxString& errMsg) {
     m_currentIndex = 0;
     m_currentStep  = 0;
 
-    std::string dir = std::string(runDir.ToUTF8());
-    if (!dir.empty() && dir.back() != '/') dir += '/';
+    std::vector<std::string> files;
+    files.reserve(paths.GetCount());
+    for (const auto& p : paths)
+        files.push_back(std::string(p.ToUTF8()));
 
-    // Charger tous les indices du catalogue
-    auto catalogue = IndicesCatalogue::all();
-    bool anyLoaded = false;
-
-    std::string firstErr;
-    for (const auto& def : catalogue) {
-        IndexData data;
-        std::string localErr;
-        if (GribReader::LoadIndex(dir, def, data, localErr)) {
-            m_loadedData.push_back(std::move(data));
-            anyLoaded = true;
-        } else if (firstErr.empty()) {
-            firstErr = def.displayName + ": " + localErr;
-        }
-    }
-
-    if (!anyLoaded) {
-        errMsg = wxString::FromUTF8(
-            "Aucun indice trouvé dans:\n" + dir +
-            "\n\nDétail: " + firstErr +
-            "\n\nVérifiez que vous avez sélectionné le dossier de la run\n"
-            "(ex: .../data/2026052518/)  et non un sous-dossier.");
+    std::string localErr;
+    if (!GribReader::LoadFiles(files, IndicesCatalogue::all(),
+                               m_loadedData, localErr)) {
+        errMsg = wxString::FromUTF8(("Échec du chargement.\n\n" + localErr).c_str());
         return false;
     }
 

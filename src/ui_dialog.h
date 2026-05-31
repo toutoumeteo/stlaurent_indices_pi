@@ -38,7 +38,7 @@ private:
     wxStaticText*  m_lblTime;      // "H+24 — 2026-05-26T18:00Z"
     wxStaticText*  m_lblStatus;    // barre de statut
 
-    // Une checkbox par indice chargé (recréées à chaque LoadRun)
+    // Une checkbox par indice chargé (recréées à chaque chargement)
     std::vector<wxCheckBox*>   m_checkboxes;
 
     // Label de valeur à droite de chaque checkbox (valeur au curseur)

@@ -49,9 +49,9 @@ public:
 
     // --- API appelée par le dialog ---
 
-    // Charge tous les indices disponibles pour une run
-    // runDir: ex "/home/plante/grib_interpol/data/2026052518/"
-    bool LoadRun(const wxString& runDir, wxString& errMsg);
+    // Charge tous les indices reconnus à partir d'un ou plusieurs fichiers GRIB2.
+    // Les records non pertinents (vent, température…) sont ignorés.
+    bool LoadFiles(const wxArrayString& paths, wxString& errMsg);
 
     // Change le pas de temps affiché (index dans scalarSteps)
     void SetDisplayStep(int stepIndex);
