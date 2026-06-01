@@ -28,7 +28,7 @@ BLACK = (0,   0,   0,  255)   # cercle central
 # Rayons (fraction du demi-côté, soit de cx)
 R_CARD_TIP   = 0.93   # pointe des branches cardinales (longues)
 R_INTER_TIP  = 0.72   # pointe des branches intercardinales (courtes)
-R_BASE       = 0.35   # rayon de la base des triangles (contrôle la largeur)
+R_BASE       = 0.22   # rayon de la base des triangles — légèrement à l'intérieur du cercle (0.26)
 
 # Demi-angle de chaque branche à sa base (degrés)
 # Plus grand = branche plus large
@@ -43,6 +43,10 @@ R_CENTER_CIRCLE = 0.26
 # ---------------------------------------------------------------------------
 img = Image.new('RGBA', (SIZE, SIZE), (0, 0, 0, 0))  # fond transparent
 draw = ImageDraw.Draw(img)
+
+# Cercle blanc de fond (visible sur toolbar sombre)
+R_BG = cx * 0.97
+draw.ellipse([cx - R_BG, cy - R_BG, cx + R_BG, cy + R_BG], fill=(255, 255, 255, 255))
 
 
 def draw_branch(angle_deg, r_tip_frac, half_deg, color):
