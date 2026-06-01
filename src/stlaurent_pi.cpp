@@ -5,8 +5,10 @@
 
 #include "stlaurent_pi.h"
 #include "ui_dialog.h"
+#include "icons/stlaurent_icon.h"
 
 #include <wx/wx.h>
+#include <wx/mstream.h>
 
 // ---------------------------------------------------------------------------
 // Points d'entrée OpenCPN
@@ -44,18 +46,11 @@ stlaurent_pi::~stlaurent_pi() {
 int stlaurent_pi::Init() {
     m_parent_window = GetOCPNCanvasWindow();
 
-    // Ajouter un bouton dans la toolbar OpenCPN
-    // TODO: remplacer par une vraie icône (fichier .svg ou .png)
-    wxBitmap icon = wxBitmap(16, 16);
-    {
-        wxMemoryDC dc(icon);
-        dc.SetBackground(wxBrush(wxColour(0, 128, 128)));
-        dc.Clear();
-        dc.SetTextForeground(*wxWHITE);
-        dc.SetFont(wxFont(8, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL,
-                          wxFONTWEIGHT_BOLD));
-        dc.DrawText("SL", 1, 1);
-    }
+    // Charger l'icône rose des vents depuis le tableau C embarqué
+    wxMemoryInputStream mis(src_icons_stlaurent_icon_png,
+                            src_icons_stlaurent_icon_png_len);
+    wxImage img(mis, wxBITMAP_TYPE_PNG);
+    wxBitmap icon(img.IsOk() ? img : wxImage(16, 16));
 
     m_toolbar_item_id = InsertPlugInTool(
         "",           // label
