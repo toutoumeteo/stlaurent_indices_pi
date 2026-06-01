@@ -21,22 +21,16 @@ SIZE = 512          # résolution de travail (mis à l'échelle ensuite)
 cx = cy = SIZE // 2
 
 # Couleurs (R, G, B, A)
-DARK  = (15,  15, 200, 255)   # bleu foncé  — branches cardinales (N S E O)
-LIGHT = (110, 110, 210, 255)  # bleu lavande — branches intercardinales
+DARK  = (50,  50, 255, 255)   # bleu foncé  — branches cardinales (N S E O)
+LIGHT = (130, 130, 240, 255)  # bleu lavande — branches intercardinales
 BLACK = (0,   0,   0,  255)   # cercle central
 
 # Rayons (fraction du demi-côté, soit de cx)
-R_CARD_TIP   = 0.93   # pointe des branches cardinales (longues)
-R_INTER_TIP  = 0.72   # pointe des branches intercardinales (courtes)
-R_BASE       = 0.22   # rayon de la base des triangles — légèrement à l'intérieur du cercle (0.26)
-
-# Demi-angle de chaque branche à sa base (degrés)
-# Plus grand = branche plus large
-HALF_CARD  = 32
-HALF_INTER = 38
+R_CARD_TIP   = 0.97   # pointe des branches cardinales (longues)
+R_INTER_TIP  = 0.8   # pointe des branches intercardinales (courtes)
 
 # Rayon du cercle noir central (fraction de cx)
-R_CENTER_CIRCLE = 0.26
+R_CENTER_CIRCLE = 0.23
 
 # ---------------------------------------------------------------------------
 # Dessin
@@ -49,17 +43,18 @@ R_BG = cx * 0.97
 draw.ellipse([cx - R_BG, cy - R_BG, cx + R_BG, cy + R_BG], fill=(255, 255, 255, 255))
 
 
-def draw_branch(angle_deg, r_tip_frac, half_deg, color):
-    """Dessine un triangle (branche) pointant dans la direction angle_deg."""
+def draw_branch(angle_deg, r_tip_frac, color):
+    """Dessine un triangle (branche) pointant dans la direction angle_deg.
+    La base est définie par le vecteur perpendiculaire à la direction."""
     r_tip  = cx * r_tip_frac
-    r_base = cx * R_BASE
+    r_base = 0.25 * cx
 
     tip = (cx + r_tip  * math.cos(math.radians(angle_deg)),
            cy + r_tip  * math.sin(math.radians(angle_deg)))
-    b1  = (cx + r_base * math.cos(math.radians(angle_deg - half_deg)),
-           cy + r_base * math.sin(math.radians(angle_deg - half_deg)))
-    b2  = (cx + r_base * math.cos(math.radians(angle_deg + half_deg)),
-           cy + r_base * math.sin(math.radians(angle_deg + half_deg)))
+    b1  = (cx + r_base * math.sin(math.radians(angle_deg)),
+           cy - r_base * math.cos(math.radians(angle_deg)))
+    b2  = (cx - r_base * math.sin(math.radians(angle_deg)),
+           cy + r_base * math.cos(math.radians(angle_deg)))
 
     draw.polygon([tip, b1, b2], fill=color)
 
@@ -67,12 +62,12 @@ def draw_branch(angle_deg, r_tip_frac, half_deg, color):
 # Branches intercardinales en premier (derrière)
 for i in range(8):
     if i % 2 != 0:   # 1, 3, 5, 7 → NE, SE, SO, NO
-        draw_branch(i * 45 - 90, R_INTER_TIP, HALF_INTER, LIGHT)
+        draw_branch(i * 45 - 90, R_INTER_TIP, LIGHT)
 
 # Branches cardinales par-dessus (devant)
 for i in range(8):
     if i % 2 == 0:   # 0, 2, 4, 6 → N, E, S, O
-        draw_branch(i * 45 - 90, R_CARD_TIP, HALF_CARD, DARK)
+        draw_branch(i * 45 - 90, R_CARD_TIP, DARK)
 
 # Cercle noir central
 cr = cx * R_CENTER_CIRCLE
