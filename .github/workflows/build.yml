@@ -6,6 +6,9 @@ on:
     tags: ["v*"]       # ex: v1.0.0 → déclenche aussi le packaging/upload
   pull_request:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     name: ${{ matrix.os }}
