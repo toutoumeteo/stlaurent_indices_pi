@@ -28,12 +28,12 @@ jobs:
             target_version: "14"
             target_arch: arm64
 
-          - os: windows-latest
-            artifact_path: build/Release/stlaurent_indices_pi.dll
-            tarball_suffix: win-x86_64
-            target_platform: msvc-wx32
-            target_version: "10"
-            target_arch: x86_64
+          # - os: windows-latest
+          #   artifact_path: build/Release/stlaurent_indices_pi.dll
+          #   tarball_suffix: win-x86_64
+          #   target_platform: msvc-wx32
+          #   target_version: "10"
+          #   target_arch: x86_64
 
     steps:
       - uses: actions/checkout@v4
