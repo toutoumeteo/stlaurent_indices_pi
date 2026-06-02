@@ -8,6 +8,7 @@
 #include <string>
 #include <ctime>
 #include <cmath>
+#include <cstdint>
 
 // ---------------------------------------------------------------------------
 // Métadonnées d'une grille lat/lon régulière
