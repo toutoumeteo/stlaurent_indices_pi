@@ -167,12 +167,18 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Upload Cloudsmith
         if: startsWith(github.ref, 'refs/tags/')
+        env:
+          CLOUDSMITH_USER: ${{ secrets.CLOUDSMITH_USER }}
+          CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
         run: |
+          echo "OWNER/REPO : '${CLOUDSMITH_USER}/stlaurent-indices-pi'"
+          echo "TARBALL    : '${TARBALL}'"
+          echo "USER len   : ${#CLOUDSMITH_USER}"
           pip install --quiet cloudsmith-cli
           cloudsmith push raw \
-            --api-key "${{ secrets.CLOUDSMITH_API_KEY }}" \
-            "${{ secrets.CLOUDSMITH_USER }}/stlaurent-indices-pi" \
-            "$TARBALL"
+            --api-key "${CLOUDSMITH_API_KEY}" \
+            "${CLOUDSMITH_USER}/stlaurent-indices-pi" \
+            "${TARBALL}"
         shell: bash
 
       # -----------------------------------------------------------------------
