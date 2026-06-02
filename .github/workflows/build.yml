@@ -52,7 +52,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Dépendances (macOS)
         if: runner.os == 'macOS'
-        run: brew install wxwidgets eccodes
+        run: brew install wxwidgets@3.2 eccodes
 
       # -----------------------------------------------------------------------
       # Dépendances Windows — vcpkg avec cache binaire GitHub Actions
