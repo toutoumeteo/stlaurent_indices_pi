@@ -3,6 +3,7 @@ name: Build
 on:
   push:
     branches: ["**"]
+    tags: ["v*"]       # ex: v1.0.0 → déclenche aussi le packaging/upload
   pull_request:
 
 jobs:
@@ -15,12 +16,31 @@ jobs:
         include:
           - os: ubuntu-24.04
             artifact_path: build/libstlaurent_indices_pi.so
+            tarball_suffix: ubuntu-x86_64
+            target_platform: ubuntu-x86_64
+            target_version: "24.04"
+            target_arch: x86_64
+
           - os: macos-13
             artifact_path: build/libstlaurent_indices_pi.dylib
+            tarball_suffix: macos-x86_64
+            target_platform: macos-x86_64
+            target_version: "13"
+            target_arch: x86_64
+
           - os: macos-latest
             artifact_path: build/libstlaurent_indices_pi.dylib
+            tarball_suffix: macos-arm64
+            target_platform: macos-arm64
+            target_version: "14"
+            target_arch: arm64
+
           - os: windows-latest
             artifact_path: build/Release/stlaurent_indices_pi.dll
+            tarball_suffix: win-x86_64
+            target_platform: msvc-wx32
+            target_version: "10"
+            target_arch: x86_64
 
     steps:
       - uses: actions/checkout@v4
@@ -83,7 +103,7 @@ jobs:
         run: cmake --build build --config Release --parallel
 
       # -----------------------------------------------------------------------
-      # Artefact téléchargeable depuis l'onglet Actions de GitHub
+      # Artefact brut (téléchargeable depuis l'onglet Actions, toujours)
       # -----------------------------------------------------------------------
       - name: Upload artefact
         uses: actions/upload-artifact@v4
@@ -91,3 +111,84 @@ jobs:
           name: stlaurent_indices_pi-${{ matrix.os }}
           path: ${{ matrix.artifact_path }}
           if-no-files-found: error
+
+      # -----------------------------------------------------------------------
+      # Packaging tarball — seulement sur les tags v*
+      # Crée un tarball avec cmake --install + tar, calcule le SHA256,
+      # génère le fichier XML de catalogue OpenCPN.
+      # -----------------------------------------------------------------------
+      - name: Créer le tarball (Linux / macOS)
+        if: startsWith(github.ref, 'refs/tags/') && runner.os != 'Windows'
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"   # retirer le "v" : v1.0.0 → 1.0.0
+          TARBALL="stlaurent_indices_pi-${VERSION}-${{ matrix.tarball_suffix }}.tar.gz"
+
+          cmake --install build --prefix /tmp/pkg
+          cd /tmp/pkg && tar czf "$GITHUB_WORKSPACE/$TARBALL" .
+          cd "$GITHUB_WORKSPACE"
+
+          if command -v sha256sum >/dev/null; then
+            SHA256=$(sha256sum "$TARBALL" | awk '{print $1}')
+          else
+            SHA256=$(shasum -a 256 "$TARBALL" | awk '{print $1}')
+          fi
+
+          echo "TARBALL=$TARBALL"       >> $GITHUB_ENV
+          echo "VERSION=$VERSION"       >> $GITHUB_ENV
+          echo "SHA256=$SHA256"         >> $GITHUB_ENV
+
+      - name: Créer le tarball (Windows)
+        if: startsWith(github.ref, 'refs/tags/') && runner.os == 'Windows'
+        run: |
+          $VERSION = "${{ github.ref_name }}" -replace '^v', ''
+          $TARBALL = "stlaurent_indices_pi-$VERSION-${{ matrix.tarball_suffix }}.zip"
+          cmake --install build --config Release --prefix $env:TEMP\pkg
+          Compress-Archive -Path "$env:TEMP\pkg\*" -DestinationPath $TARBALL
+          $SHA256 = (Get-FileHash $TARBALL -Algorithm SHA256).Hash.ToLower()
+          echo "TARBALL=$TARBALL"    >> $env:GITHUB_ENV
+          echo "VERSION=$VERSION"   >> $env:GITHUB_ENV
+          echo "SHA256=$SHA256"     >> $env:GITHUB_ENV
+
+      - name: Générer le XML de catalogue
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          CLOUDSMITH_USER="${{ secrets.CLOUDSMITH_USER }}"
+          URL="https://dl.cloudsmith.io/public/${CLOUDSMITH_USER}/stlaurent-indices-pi/raw/files/${TARBALL}"
+          XML="catalog_${{ matrix.tarball_suffix }}.xml"
+
+          sed \
+            -e "s|@PLUGIN_VERSION@|${VERSION}|g" \
+            -e "s|@TARBALL_URL@|${URL}|g" \
+            -e "s|@TARBALL_SHA256@|${SHA256}|g" \
+            -e "s|@TARGET_PLATFORM@|${{ matrix.target_platform }}|g" \
+            -e "s|@TARGET_VERSION@|${{ matrix.target_version }}|g" \
+            -e "s|@TARGET_ARCH@|${{ matrix.target_arch }}|g" \
+            packaging/plugin.xml.in > "$XML"
+          echo "XML=$XML" >> $GITHUB_ENV
+        shell: bash
+
+      # -----------------------------------------------------------------------
+      # Upload sur Cloudsmith — seulement sur les tags v*
+      # Prérequis : secrets CLOUDSMITH_API_KEY et CLOUDSMITH_USER dans GitHub
+      # -----------------------------------------------------------------------
+      - name: Upload Cloudsmith
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          pip install --quiet cloudsmith-cli
+          cloudsmith push raw \
+            --api-key "${{ secrets.CLOUDSMITH_API_KEY }}" \
+            "${{ secrets.CLOUDSMITH_USER }}/stlaurent-indices-pi" \
+            "$TARBALL"
+        shell: bash
+
+      # -----------------------------------------------------------------------
+      # Sauvegarder le XML de catalogue comme artefact GitHub
+      # → à récupérer pour la PR dans opencpn/plugins
+      # -----------------------------------------------------------------------
+      - name: Upload XML catalogue
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/upload-artifact@v4
+        with:
+          name: catalog-${{ matrix.tarball_suffix }}
+          path: "catalog_${{ matrix.tarball_suffix }}.xml"

@@ -244,3 +244,46 @@ if(APPLE)
     # 3. Symboles OpenCPN (GetCanvasPixLL, etc.) résolus depuis l'hôte au chargement
     target_link_options(stlaurent_indices_pi PRIVATE -undefined dynamic_lookup)
 endif()
+
+# ---------------------------------------------------------------------------
+# Installation et packaging
+# ---------------------------------------------------------------------------
+
+# Répertoire cible selon la plateforme (relatif au CMAKE_INSTALL_PREFIX)
+if(WIN32)
+    set(_plugin_dir "plugins")
+elseif(APPLE)
+    set(_plugin_dir "PlugIns")
+else()
+    set(_plugin_dir "lib/opencpn")
+endif()
+
+install(TARGETS stlaurent_indices_pi
+    LIBRARY DESTINATION ${_plugin_dir}   # .so / .dylib
+    RUNTIME DESTINATION ${_plugin_dir})  # .dll (Windows)
+
+# ---------------------------------------------------------------------------
+# CPack — génération du tarball redistribuable
+# Utilisation :
+#   cmake --install build --prefix /tmp/pkg
+#   cd /tmp/pkg && tar czf stlaurent_indices_pi-X.Y.Z-<os>.tar.gz .
+# (Le workflow CI fait ça automatiquement sur les tags.)
+# ---------------------------------------------------------------------------
+set(CPACK_PACKAGE_NAME             "stlaurent_indices_pi")
+set(CPACK_PACKAGE_VENDOR           "toutoumeteo")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+    "Indices Saint-Laurent — météo-marine ECCC/RDWPS pour OpenCPN")
+set(CPACK_PACKAGE_VERSION          "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_VERSION_MAJOR    "${PROJECT_VERSION_MAJOR}")
+set(CPACK_PACKAGE_VERSION_MINOR    "${PROJECT_VERSION_MINOR}")
+set(CPACK_PACKAGE_VERSION_PATCH    "${PROJECT_VERSION_PATCH}")
+set(CPACK_PACKAGE_CONTACT          "https://github.com/toutoumeteo/stlaurent_indices_pi")
+set(CPACK_RESOURCE_FILE_LICENSE    "${CMAKE_SOURCE_DIR}/LICENSE")
+
+if(WIN32)
+    set(CPACK_GENERATOR "ZIP")
+else()
+    set(CPACK_GENERATOR "TGZ")
+endif()
+
+include(CPack)
