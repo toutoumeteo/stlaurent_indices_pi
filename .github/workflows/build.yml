@@ -21,13 +21,6 @@ jobs:
             target_version: "24.04"
             target_arch: x86_64
 
-          - os: macos-13
-            artifact_path: build/libstlaurent_indices_pi.dylib
-            tarball_suffix: macos-x86_64
-            target_platform: macos-x86_64
-            target_version: "13"
-            target_arch: x86_64
-
           - os: macos-latest
             artifact_path: build/libstlaurent_indices_pi.dylib
             tarball_suffix: macos-arm64
