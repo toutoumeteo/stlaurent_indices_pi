@@ -170,9 +170,6 @@ bool OverlayFactory::RenderDC(wxDC& dc, PlugIn_ViewPort* vp) {
 
     const GridInfo&  g  = m_data->grid;
     const TimeStep&  ts = m_data->scalarSteps[m_stepIndex];
-    double vmin = m_data->def.minValue;
-    double vmax = m_data->def.maxValue;
-    if (vmax <= vmin) vmax = vmin + 1.0;
 
     // Sous-échantillonnage pour performances
     int step = std::max(1, std::max(g.ni, g.nj) / 200);
@@ -182,9 +179,8 @@ bool OverlayFactory::RenderDC(wxDC& dc, PlugIn_ViewPort* vp) {
             double v = ts.get(i, j, g);
             if (v >= TimeStep::MISSING_VALUE - 1.0) continue;
 
-            float t = (float)std::max(0.0, std::min(1.0, (v - vmin)/(vmax - vmin)));
             unsigned char r, gv, b, a;
-            ValueToRGBA(t, r, gv, b, a);
+            ValueToRGBA((float)v, m_data->def, r, gv, b, a);
 
             wxPoint p;
             GetCanvasPixLL(vp, &p, g.lat(j), g.lon(i));
@@ -208,10 +204,6 @@ void OverlayFactory::BuildTexture() {
     // Vérification de cohérence taille grille ↔ taille données
     if ((int)ts.values.size() != g.ni * g.nj) return;
 
-    double vmin = m_data->def.minValue;
-    double vmax = m_data->def.maxValue;
-    if (vmax <= vmin) vmax = vmin + 1.0;
-
     m_texWidth  = g.ni;
     m_texHeight = g.nj;
 
@@ -233,9 +225,8 @@ void OverlayFactory::BuildTexture() {
                 buf[idx+2] = 0;
                 buf[idx+3] = 0;
             } else {
-                float t = (float)std::max(0.0, std::min(1.0, (v - vmin)/(vmax - vmin)));
                 unsigned char r, g_c, b, a;
-                ValueToRGBA(t, r, g_c, b, a);
+                ValueToRGBA((float)v, m_data->def, r, g_c, b, a);
                 // Alpha prémultiplié : RGB stockés multipliés par alpha. Combiné
                 // au blend GL_ONE/GL_ONE_MINUS_SRC_ALPHA dans DrawTexture, cela
                 // élimine le liseré sombre aux côtes (interpolation GL_LINEAR
@@ -376,14 +367,28 @@ void OverlayFactory::BuildLegendTexture() {
         dc.SetTextForeground(wxColour(230, 230, 230));
         dc.DrawText(title, S(8), S(5));
 
-        // Barre de couleur (même palette que l'overlay)
+        // Barre de couleur — discrète si colorScale défini, sinon gradient
         const int barX = S(8), barY = S(23), barW = W - 2 * barX, barH = S(18);
-        for (int x = 0; x < barW; ++x) {
-            float t = (float)x / (float)(barW - 1);
-            unsigned char r, g, b, a;
-            ValueToRGBA(t, r, g, b, a);
-            dc.SetPen(wxPen(wxColour(r, g, b)));
-            dc.DrawLine(barX + x, barY, barX + x, barY + barH);
+        if (!def.colorScale.empty()) {
+            int n = (int)def.colorScale.size();
+            for (int k = 0; k < barW; ++k) {
+                // Position dans la barre → indice de niveau
+                int lvl = (int)(k * n / barW);
+                lvl = std::max(0, std::min(n - 1, lvl));
+                auto& c = def.colorScale[lvl];
+                dc.SetPen(wxPen(wxColour(c.r, c.g, c.b)));
+                dc.DrawLine(barX + k, barY, barX + k, barY + barH);
+            }
+        } else {
+            for (int x = 0; x < barW; ++x) {
+                float t = (float)x / (float)(barW - 1);
+                // Pour la légende du gradient on passe une valeur physique intermédiaire
+                float v = (float)(def.minValue + t * (def.maxValue - def.minValue));
+                unsigned char r, g, b, a;
+                ValueToRGBA(v, def, r, g, b, a);
+                dc.SetPen(wxPen(wxColour(r, g, b)));
+                dc.DrawLine(barX + x, barY, barX + x, barY + barH);
+            }
         }
         // Bordure fine autour de la barre
         dc.SetPen(wxPen(wxColour(160, 160, 160)));
@@ -394,8 +399,9 @@ void OverlayFactory::BuildLegendTexture() {
         dc.SetFont(wxFont(fontPt, wxFONTFAMILY_DEFAULT,
                           wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
         dc.SetTextForeground(wxColour(200, 200, 200));
-        wxString minStr = wxString::Format(wxT("%.1f"), def.minValue);
-        wxString maxStr = wxString::Format(wxT("%.1f"), def.maxValue);
+        wxString minStr = wxString::Format(wxT("%.2f"), def.minValue);
+        wxString maxStr = wxString::Format(wxT("%.1f"), def.colorScale.empty()
+                            ? def.maxValue : def.colorScale.back().threshold);
         const int textY = barY + barH + S(3);
         dc.DrawText(minStr, barX, textY);
         wxSize maxSz = dc.GetTextExtent(maxStr);
@@ -585,48 +591,54 @@ void OverlayFactory::DrawArrowGL(float x, float y, float dir_deg, float length) 
 }
 
 // ---------------------------------------------------------------------------
-// Palette de couleurs : bleu → cyan → vert → jaune → orange → rouge
-// t ∈ [0, 1]
+// Conversion valeur physique → couleur RGBA
+//   • Palette discrète (colorScale non vide) : cherche le premier niveau
+//     dont le seuil >= valeur et utilise sa couleur (step function).
+//   • Gradient linéaire (colorScale vide) : bleu→cyan→vert→jaune→rouge
+//     sur [def.minValue, def.maxValue].
 // ---------------------------------------------------------------------------
-void OverlayFactory::ValueToRGBA(float t,
+void OverlayFactory::ValueToRGBA(float value,
+                                  const IndexDefinition& def,
                                   unsigned char& r, unsigned char& g,
                                   unsigned char& b, unsigned char& a)
 {
-    t = std::max(0.0f, std::min(1.0f, t));
+    a = 255;  // opaque — la transparence est pilotée par glColor4f
 
-    float r_f, g_f, b_f;
-
-    if (t < 0.25f) {
-        // Bleu → Cyan
-        float s = t / 0.25f;
-        r_f = 0.0f;
-        g_f = s;
-        b_f = 1.0f;
-    } else if (t < 0.50f) {
-        // Cyan → Vert
-        float s = (t - 0.25f) / 0.25f;
-        r_f = 0.0f;
-        g_f = 1.0f;
-        b_f = 1.0f - s;
-    } else if (t < 0.75f) {
-        // Vert → Jaune
-        float s = (t - 0.50f) / 0.25f;
-        r_f = s;
-        g_f = 1.0f;
-        b_f = 0.0f;
-    } else {
-        // Jaune → Rouge
-        float s = (t - 0.75f) / 0.25f;
-        r_f = 1.0f;
-        g_f = 1.0f - s;
-        b_f = 0.0f;
+    if (!def.colorScale.empty()) {
+        // Palette discrète
+        for (const auto& lvl : def.colorScale) {
+            if (value <= lvl.threshold) {
+                r = lvl.r; g = lvl.g; b = lvl.b;
+                return;
+            }
+        }
+        // Au-delà du dernier niveau → couleur du dernier niveau
+        r = def.colorScale.back().r;
+        g = def.colorScale.back().g;
+        b = def.colorScale.back().b;
+        return;
     }
 
-    // Arrondi (+0.5) plutôt que troncature
+    // Gradient linéaire (fallback)
+    double vmin = def.minValue, vmax = def.maxValue;
+    if (vmax <= vmin) vmax = vmin + 1.0;
+    float t = (float)std::max(0.0, std::min(1.0, (value - vmin) / (vmax - vmin)));
+
+    float r_f, g_f, b_f;
+    if (t < 0.25f) {
+        float s = t / 0.25f;
+        r_f = 0.0f; g_f = s;       b_f = 1.0f;
+    } else if (t < 0.50f) {
+        float s = (t - 0.25f) / 0.25f;
+        r_f = 0.0f; g_f = 1.0f;    b_f = 1.0f - s;
+    } else if (t < 0.75f) {
+        float s = (t - 0.50f) / 0.25f;
+        r_f = s;    g_f = 1.0f;    b_f = 0.0f;
+    } else {
+        float s = (t - 0.75f) / 0.25f;
+        r_f = 1.0f; g_f = 1.0f - s; b_f = 0.0f;
+    }
     r = (unsigned char)(r_f * 255.0f + 0.5f);
     g = (unsigned char)(g_f * 255.0f + 0.5f);
     b = (unsigned char)(b_f * 255.0f + 0.5f);
-    // Opaque : la transparence de l'overlay est pilotée par glColor4f dans
-    // DrawTexture, pas par la couleur de palette (évite la double opacité).
-    a = 255;
 }

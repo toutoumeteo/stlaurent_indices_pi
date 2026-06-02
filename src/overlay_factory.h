@@ -89,9 +89,12 @@ private:
     void BuildTexture();
     void BuildLegendTexture();   // crée la texture légende via wxBitmap
 
-    // Convertit une valeur normalisée [0,1] en couleur RGBA
-    // Palette : bleu → cyan → vert → jaune → orange → rouge
-    static void ValueToRGBA(float t, unsigned char& r, unsigned char& g,
+    // Convertit une valeur physique en couleur RGBA.
+    // Si def.colorScale est non vide → palette discrète par niveaux.
+    // Sinon → gradient linéaire bleu→rouge sur [def.minValue, def.maxValue].
+    static void ValueToRGBA(float value,
+                            const IndexDefinition& def,
+                            unsigned char& r, unsigned char& g,
                             unsigned char& b, unsigned char& a);
 
     // --- Rendu de la texture sur la carte ---

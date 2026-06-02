@@ -88,10 +88,15 @@ struct IndexDefinition {
     int directionParamNumber;    // parameterNumber du champ direction associé
                                  // -1 si cet indice n'a pas de direction
 
-    // Palette de couleurs
-    double minValue;             // valeur min pour l'échelle de couleurs
-    double maxValue;             // valeur max pour l'échelle de couleurs
-    // TODO: type de palette (divergente, séquentielle, feu de circulation...)
+    // Palette de couleurs — gradient linéaire
+    double minValue;   // valeur min (utilisée si colorScale est vide)
+    double maxValue;   // valeur max (utilisée si colorScale est vide)
+
+    // Palette discrète par niveaux (prioritaire sur minValue/maxValue si non vide).
+    // Chaque entrée définit la valeur MAX du niveau et sa couleur RGB.
+    // Triée par threshold croissant. Toute valeur > dernier threshold → couleur du dernier niveau.
+    struct ColorLevel { float threshold; uint8_t r, g, b; };
+    std::vector<ColorLevel> colorScale;
 };
 
 // ---------------------------------------------------------------------------
@@ -149,7 +154,31 @@ namespace IndicesCatalogue {
         d.parameterNumber      = 192;
         d.directionParamNumber = 193;
         d.minValue             = 0.0;
-        d.maxValue             = 2.0;  // AGITIDX observé jusqu'à ~1.65
+        d.maxValue             = 5.0;
+        // Palette discrète calquée sur la barre de couleur ECCC/RDWPS.
+        // Extraite de l'image de référence (barre_agitation.png).
+        d.colorScale = {
+            { 0.04f, 164, 203, 250 },  // bleu très clair
+            { 0.08f, 127, 175, 249 },  // bleu clair
+            { 0.12f,  92, 148, 247 },  // bleu moyen clair
+            { 0.16f,  61, 121, 246 },  // bleu moyen
+            { 0.20f,  49, 108, 233 },  // bleu
+            { 0.25f,  97, 148, 171 },  // bleu-vert
+            { 0.30f, 156, 189, 116 },  // vert clair
+            { 0.35f, 217, 229,  84 },  // jaune-vert
+            { 0.40f, 253, 244,  81 },  // jaune
+            { 0.50f, 245, 193,  66 },  // jaune-orange
+            { 0.60f, 242, 167,  59 },  // orange clair
+            { 0.70f, 239, 135,  51 },  // orange
+            { 0.80f, 236, 100,  43 },  // orange foncé
+            { 0.90f, 235,  70,  38 },  // orange-rouge
+            { 1.10f, 234,  53,  36 },  // rouge
+            { 1.30f, 194,  41,  27 },  // rouge foncé
+            { 1.50f, 144,  27,  18 },  // rouge très foncé
+            { 1.70f,  95,  15,   8 },  // bordeaux
+            { 2.00f,  46,   4,   2 },  // rouge presque noir
+            { 5.00f,   3,   0,   0 },  // noir (>2 m)
+        };
         return d;
     }
 
