@@ -16,11 +16,11 @@
     <release>1</release>
     <summary>Indices Saint-Laurent — météo-marine ECCC/RDWPS</summary>
     <api-version>1.16</api-version>
-    <author>toutoumeteo</author>
+    <author>André Plante</author>
     <description>
       Affiche les indices météo-marins du Saint-Laurent produits par
-      Environnement et Changement climatique Canada (ECCC/RDWPS) sur la
-      carte nautique OpenCPN : indice d'agitation, flèches de direction,
+      iMeteo.ca à partir des données GRIB d'Environnement et Changement climatique Canada
+      sur la carte nautique OpenCPN : indice d'agitation, flèches de direction,
       palette de couleurs 20 niveaux, navigation entre 48 pas de temps.
     </description>
     <git>https://github.com/toutoumeteo/stlaurent_indices_pi</git>
