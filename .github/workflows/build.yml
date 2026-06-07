@@ -63,35 +63,43 @@ jobs:
       # Runs suivants : ~2 min (restauration du cache)
       # Note: x-gha a été retiré de vcpkg → on utilise actions/cache à la place
       # -----------------------------------------------------------------------
+      # wxWidgets : on utilise les binaires OFFICIELS wx 3.2 (suffixe _vc14x)
+      # plutôt que vcpkg (qui produit _vc_x64_custom) car OpenCPN embarque
+      # wxmsw32u_core_vc14x.dll — les noms doivent correspondre exactement.
+      - name: Cache wxWidgets (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: C:\wxWidgets
+          key: wxwidgets-3.2.6-vc14x-x64
+
+      - name: wxWidgets 3.2 officiel vc14x (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path "C:\wxWidgets\lib\vc14x_x64_dll") {
+            Write-Host "wxWidgets déjà en cache."; exit 0
+          }
+          $v = "3.2.6"
+          $base = "https://github.com/wxWidgets/wxWidgets/releases/download/v$v"
+          New-Item -ItemType Directory -Force C:\wxWidgets | Out-Null
+          foreach ($f in @("wxWidgets-$v-headers.7z", "wxMSW-${v}_vc14x_x64_Dev.7z")) {
+            Write-Host "Téléchargement $f..."
+            Invoke-WebRequest "$base/$f" -OutFile "$env:TEMP\$f"
+            7z x "$env:TEMP\$f" -oC:\wxWidgets -y | Out-Null
+          }
+
       - name: Cache vcpkg (Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
           path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
-          key: vcpkg-${{ hashFiles('.github/workflows/build.yml') }}
-          restore-keys: vcpkg-
+          key: vcpkg-eccodes-${{ hashFiles('.github/workflows/build.yml') }}
+          restore-keys: vcpkg-eccodes-
 
-      # Génère un vcpkg.json qui épingle wxWidgets à 3.2.x.
-      # OpenCPN utilise wx 3.2 (wxmsw32u_core_vc14x.dll) ; compiler contre
-      # wx 3.3 produit wxmsw33u_core_vc14x.dll → LoadLibrary échoue au chargement.
-      - name: Épingler wxWidgets 3.2 (Windows)
+      - name: eccodes (Windows)
         if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $baseline = (git -C C:\vcpkg rev-parse HEAD)
-          Set-Content vcpkg.json "{
-            `"name`": `"stlaurent-indices-pi`",
-            `"version-string`": `"1.0`",
-            `"builtin-baseline`": `"$baseline`",
-            `"overrides`": [{ `"name`": `"wxwidgets`", `"version`": `"3.2.6`" }],
-            `"dependencies`": [{ `"name`": `"wxwidgets`" }, `"eccodes`"]
-          }"
-
-      - name: Dépendances (Windows)
-        if: runner.os == 'Windows'
-        run: vcpkg install --triplet x64-windows --x-install-root C:\vcpkg\installed
-        env:
-          VCPKG_DEFAULT_TRIPLET: x64-windows
+        run: vcpkg install eccodes:x64-windows
 
       # -----------------------------------------------------------------------
       # Configuration CMake
@@ -104,6 +112,8 @@ jobs:
         if: runner.os == 'Windows'
         run: |
           cmake -B build -DCMAKE_BUILD_TYPE=Release `
+            -DwxWidgets_ROOT_DIR="C:\wxWidgets" `
+            -DwxWidgets_LIB_DIR="C:\wxWidgets\lib\vc14x_x64_dll" `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows
 
