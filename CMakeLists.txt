@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.21)
 project(stlaurent_indices_pi VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -258,9 +258,18 @@ else()
     set(_plugin_dir "lib/opencpn")
 endif()
 
-install(TARGETS stlaurent_indices_pi
-    LIBRARY DESTINATION ${_plugin_dir}   # .so / .dylib
-    RUNTIME DESTINATION ${_plugin_dir})  # .dll (Windows)
+if(WIN32)
+    # Installe le .dll du plugin + toutes les DLLs de dépendances vcpkg
+    # (eccodes.dll, wxWidgets, etc.) dans le même répertoire.
+    # $<TARGET_RUNTIME_DLLS:...> liste les DLLs des targets IMPORTED liées.
+    install(TARGETS stlaurent_indices_pi RUNTIME DESTINATION ${_plugin_dir})
+    install(FILES $<TARGET_RUNTIME_DLLS:stlaurent_indices_pi>
+            DESTINATION ${_plugin_dir})
+else()
+    install(TARGETS stlaurent_indices_pi
+        LIBRARY DESTINATION ${_plugin_dir}   # .so / .dylib
+        RUNTIME DESTINATION ${_plugin_dir})  # jamais atteint sur Unix
+endif()
 
 # ---------------------------------------------------------------------------
 # CPack — génération du tarball redistribuable
