@@ -100,7 +100,7 @@ jobs:
 
       - name: eccodes (Windows)
         if: runner.os == 'Windows'
-        run: vcpkg install eccodes:x86-windows
+        run: vcpkg install eccodes:x86-windows --allow-unsupported
 
       # -----------------------------------------------------------------------
       # Configuration CMake
