@@ -259,12 +259,19 @@ else()
 endif()
 
 if(WIN32)
-    # Installe le .dll du plugin + toutes les DLLs de dépendances vcpkg
-    # (eccodes.dll, wxWidgets, etc.) dans le même répertoire.
-    # $<TARGET_RUNTIME_DLLS:...> liste les DLLs des targets IMPORTED liées.
-    install(TARGETS stlaurent_indices_pi RUNTIME DESTINATION ${_plugin_dir})
-    install(FILES $<TARGET_RUNTIME_DLLS:stlaurent_indices_pi>
-            DESTINATION ${_plugin_dir})
+    # Installe le .dll du plugin + toutes ses dépendances transitives vcpkg.
+    # RUNTIME_DEPENDENCY_SET fait un scan récursif (comme le loader Windows).
+    # Exclusions :
+    #   - api-ms-* / ext-ms-* : DLLs d'API forwarding Windows (virtuelles)
+    #   - System32             : DLLs système (kernel32, msvcrt, etc.)
+    #   - wx*                  : wxWidgets fourni par OpenCPN lui-même
+    install(TARGETS stlaurent_indices_pi
+        RUNTIME DESTINATION ${_plugin_dir}
+        RUNTIME_DEPENDENCY_SET plugin_deps)
+    install(RUNTIME_DEPENDENCY_SET plugin_deps
+        PRE_EXCLUDE_REGEXES  "api-ms-.*" "ext-ms-.*" "wx.*"
+        POST_EXCLUDE_REGEXES ".*[Ss]ystem32/.*\\.dll"
+        DESTINATION ${_plugin_dir})
 else()
     install(TARGETS stlaurent_indices_pi
         LIBRARY DESTINATION ${_plugin_dir}   # .so / .dylib
