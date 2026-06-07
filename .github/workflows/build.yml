@@ -139,6 +139,15 @@ jobs:
           $VERSION = "${{ github.ref_name }}" -replace '^v', ''
           $TARBALL = "stlaurent_indices_pi-$VERSION-${{ matrix.tarball_suffix }}.zip"
           cmake --install build --config Release --prefix $env:TEMP\pkg
+
+          # Copier les DLLs runtime de vcpkg dans plugins/
+          # wx* est exclu : fourni par OpenCPN lui-même
+          $vcpkgBin = "C:\vcpkg\installed\x64-windows\bin"
+          $dest = "$env:TEMP\pkg\plugins"
+          Get-ChildItem "$vcpkgBin\*.dll" |
+            Where-Object { $_.Name -notmatch "^wx" } |
+            ForEach-Object { Copy-Item $_.FullName $dest }
+
           Compress-Archive -Path "$env:TEMP\pkg\*" -DestinationPath $TARBALL
           $SHA256 = (Get-FileHash $TARBALL -Algorithm SHA256).Hash.ToLower()
           echo "TARBALL=$TARBALL"    >> $env:GITHUB_ENV

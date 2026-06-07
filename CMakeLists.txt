@@ -258,25 +258,9 @@ else()
     set(_plugin_dir "lib/opencpn")
 endif()
 
-if(WIN32)
-    # Installe le .dll du plugin + toutes ses dépendances transitives vcpkg.
-    # RUNTIME_DEPENDENCY_SET fait un scan récursif (comme le loader Windows).
-    # Exclusions :
-    #   - api-ms-* / ext-ms-* : DLLs d'API forwarding Windows (virtuelles)
-    #   - System32             : DLLs système (kernel32, msvcrt, etc.)
-    #   - wx*                  : wxWidgets fourni par OpenCPN lui-même
-    install(TARGETS stlaurent_indices_pi
-        RUNTIME DESTINATION ${_plugin_dir}
-        RUNTIME_DEPENDENCY_SET plugin_deps)
-    install(RUNTIME_DEPENDENCY_SET plugin_deps
-        PRE_EXCLUDE_REGEXES  "api-ms-.*" "ext-ms-.*" "wx.*"
-        POST_EXCLUDE_REGEXES ".*[Ss]ystem32/.*\\.dll"
-        DESTINATION ${_plugin_dir})
-else()
-    install(TARGETS stlaurent_indices_pi
-        LIBRARY DESTINATION ${_plugin_dir}   # .so / .dylib
-        RUNTIME DESTINATION ${_plugin_dir})  # jamais atteint sur Unix
-endif()
+install(TARGETS stlaurent_indices_pi
+    LIBRARY DESTINATION ${_plugin_dir}   # .so / .dylib
+    RUNTIME DESTINATION ${_plugin_dir})  # .dll (Windows)
 
 # ---------------------------------------------------------------------------
 # CPack — génération du tarball redistribuable
