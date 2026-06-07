@@ -71,9 +71,25 @@ jobs:
           key: vcpkg-${{ hashFiles('.github/workflows/build.yml') }}
           restore-keys: vcpkg-
 
+      # Génère un vcpkg.json qui épingle wxWidgets à 3.2.x.
+      # OpenCPN utilise wx 3.2 (wxmsw32u_core_vc14x.dll) ; compiler contre
+      # wx 3.3 produit wxmsw33u_core_vc14x.dll → LoadLibrary échoue au chargement.
+      - name: Épingler wxWidgets 3.2 (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $baseline = (git -C C:\vcpkg rev-parse HEAD)
+          Set-Content vcpkg.json "{
+            `"name`": `"stlaurent-indices-pi`",
+            `"version-string`": `"1.0`",
+            `"builtin-baseline`": `"$baseline`",
+            `"overrides`": [{ `"name`": `"wxwidgets`", `"version`": `"3.2.6`" }],
+            `"dependencies`": [{ `"name`": `"wxwidgets`" }, `"eccodes`"]
+          }"
+
       - name: Dépendances (Windows)
         if: runner.os == 'Windows'
-        run: vcpkg install wxwidgets:x64-windows eccodes:x64-windows
+        run: vcpkg install --triplet x64-windows --x-install-root C:\vcpkg\installed
         env:
           VCPKG_DEFAULT_TRIPLET: x64-windows
 
