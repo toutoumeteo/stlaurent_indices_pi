@@ -89,34 +89,14 @@ else()
 endif()
 
 # ---------------------------------------------------------------------------
-# ecCodes
-#   Windows (vcpkg) : find_package CONFIG
-#   Linux / macOS   : find_path + find_library
-#   (pkg-config évité : le .pc eccodes sur Ubuntu 22.04 contient un
-#    includedir relatif cassé → IMPORTED_TARGET échoue à la validation.
-#    find_library passe le chemin absolu à l'éditeur de liens → pas besoin
-#    de -L séparé, fonctionne aussi bien sur macOS Homebrew que sur Linux.)
+# GDAL — lecteur GRIB2
+#   Partout : find_package(GDAL) crée la cible GDAL::GDAL (cmake >= 3.14).
+#   Windows  : vcpkg fournit GDALConfig.cmake → trouvé via toolchain.
+#   Linux    : libgdal-dev → trouvé via FindGDAL.cmake + gdal-config.
+#   macOS    : brew install gdal → trouvé via /opt/homebrew dans PREFIX_PATH.
 # ---------------------------------------------------------------------------
-if(WIN32)
-    find_package(eccodes REQUIRED CONFIG)
-else()
-    find_path(ECCODES_INCLUDE_DIR eccodes.h
-        HINTS /opt/homebrew/include /usr/include /usr/local/include
-        PATH_SUFFIXES eccodes x86_64-linux-gnu)
-    find_library(ECCODES_LIBRARY NAMES eccodes
-        HINTS /opt/homebrew/lib /usr/lib /usr/local/lib
-              /usr/lib/x86_64-linux-gnu)
-    if(NOT ECCODES_INCLUDE_DIR OR NOT ECCODES_LIBRARY)
-        message(FATAL_ERROR
-            "eccodes introuvable.\n"
-            "  macOS  : brew install eccodes\n"
-            "  Ubuntu : sudo apt install libeccodes-dev\n"
-            "Passez le chemin manuellement si nécessaire :\n"
-            "  -DECCODES_INCLUDE_DIR=<path> -DECCODES_LIBRARY=<path>\n")
-    endif()
-    message(STATUS "ecCodes headers : ${ECCODES_INCLUDE_DIR}")
-    message(STATUS "ecCodes library : ${ECCODES_LIBRARY}")
-endif()
+find_package(GDAL REQUIRED)
+message(STATUS "GDAL version : ${GDAL_VERSION}")
 
 # ---------------------------------------------------------------------------
 # OpenGL
@@ -153,13 +133,8 @@ if(wxWidgets_CXX_FLAGS)
     target_compile_options(stlaurent_indices_pi PRIVATE ${_wx_cxx_flags})
 endif()
 
-# ecCodes — lien
-if(WIN32)
-    target_link_libraries(stlaurent_indices_pi PRIVATE eccodes)
-else()
-    target_include_directories(stlaurent_indices_pi PRIVATE ${ECCODES_INCLUDE_DIR})
-    target_link_libraries(stlaurent_indices_pi PRIVATE ${ECCODES_LIBRARY})
-endif()
+# GDAL
+target_link_libraries(stlaurent_indices_pi PRIVATE GDAL::GDAL)
 
 # OpenGL
 target_link_libraries(stlaurent_indices_pi PRIVATE OpenGL::GL)

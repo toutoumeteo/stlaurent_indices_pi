@@ -48,25 +48,21 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y libwxgtk3.2-dev libeccodes-dev libgl-dev
+          sudo apt-get install -y libwxgtk3.2-dev libgdal-dev libgl-dev
 
       # -----------------------------------------------------------------------
       # Dépendances macOS
       # -----------------------------------------------------------------------
       - name: Dépendances (macOS)
         if: runner.os == 'macOS'
-        run: brew install wxwidgets@3.2 eccodes
+        run: brew install wxwidgets@3.2 gdal
 
       # -----------------------------------------------------------------------
-      # Dépendances Windows — vcpkg avec cache actions/cache
-      # Premier run : ~45 min (compilation depuis les sources)
-      # Runs suivants : ~2 min (restauration du cache)
-      # Note: x-gha a été retiré de vcpkg → on utilise actions/cache à la place
+      # Dépendances Windows
       # -----------------------------------------------------------------------
-      # OpenCPN sur Windows est une application 32-bit (x86) installée dans
-      # Program Files (x86). Le plugin doit donc être 32-bit (x86-windows).
-      # wxWidgets : binaires officiels 3.2 (lib/vc14x_dll = x86, suffixe _vc14x
-      # sans _x64) — correspond exactement aux DLLs embarquées par OpenCPN.
+      # OpenCPN sur Windows est une application 32-bit (x86).
+      # wxWidgets : binaires officiels 3.2 (lib/vc14x_dll, suffixe _vc14x sans _x64).
+      # GDAL : vcpkg gdal:x86-windows (supporte x86 officiellement).
       - name: Cache wxWidgets (Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@v4
@@ -90,17 +86,17 @@ jobs:
             7z x "$env:TEMP\$f" -oC:\wxWidgets -y | Out-Null
           }
 
-      - name: Cache vcpkg (Windows)
+      - name: Cache vcpkg GDAL (Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
-          path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
-          key: vcpkg-eccodes-${{ hashFiles('.github/workflows/build.yml') }}
-          restore-keys: vcpkg-eccodes-
+          path: C:\vcpkg\installed
+          key: vcpkg-gdal-x86-${{ hashFiles('.github/workflows/build.yml') }}
+          restore-keys: vcpkg-gdal-x86-
 
-      - name: eccodes (Windows)
+      - name: GDAL x86 via vcpkg (Windows)
         if: runner.os == 'Windows'
-        run: vcpkg install eccodes:x86-windows
+        run: vcpkg install gdal:x86-windows
 
       # -----------------------------------------------------------------------
       # Configuration CMake
