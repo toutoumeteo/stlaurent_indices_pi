@@ -118,8 +118,13 @@ jobs:
           if (Test-Path "C:\eccodes-x86\bin\eccodes.dll") {
             Write-Host "eccodes en cache."; exit 0
           }
+          # ecbuild : outil cmake requis par eccodes (scripts purs, pas de compilation)
+          git clone --depth 1 --branch 3.7.2 https://github.com/ecmwf/ecbuild.git ecbuild-src
+          cmake -S ecbuild-src -B ecbuild-src/build -DCMAKE_INSTALL_PREFIX=C:\ecbuild
+          cmake --install ecbuild-src/build
+
+          # eccodes 2.24.0 (support x86 natif)
           git clone --depth 1 --branch 2.24.0 https://github.com/ecmwf/eccodes.git eccodes-src
-          # v2.24.0 supporte x86 nativement (avant le drop officiel 32-bit)
           cmake -S eccodes-src -B eccodes-src/build -A Win32 `
             -DCMAKE_BUILD_TYPE=Release `
             -DENABLE_MEMFS=ON `
@@ -129,7 +134,7 @@ jobs:
             -DENABLE_JPG=OFF `
             -DENABLE_ECCODES_OMP_LOCKS=OFF `
             -DENABLE_EXTRA_TESTS=OFF `
-            -DZLIB_ROOT="C:\vcpkg\installed\x86-windows" `
+            -DCMAKE_PREFIX_PATH="C:\ecbuild;C:\vcpkg\installed\x86-windows" `
             -DCMAKE_INSTALL_PREFIX=C:\eccodes-x86
           cmake --build eccodes-src/build --config Release --parallel
           cmake --install eccodes-src/build --config Release
