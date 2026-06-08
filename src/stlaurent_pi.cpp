@@ -100,6 +100,21 @@ bool stlaurent_pi::DeInit() {
 }
 
 // ---------------------------------------------------------------------------
+// Icône plugin — évite le nullptr de la classe de base (crash dans OpenCPN
+// quand il construit le gestionnaire de plugins)
+// ---------------------------------------------------------------------------
+wxBitmap* stlaurent_pi::GetPlugInBitmap() {
+    static wxBitmap s_bm;
+    if (!s_bm.IsOk()) {
+        wxMemoryInputStream mis(src_icons_stlaurent_icon_png,
+                                src_icons_stlaurent_icon_png_len);
+        wxImage img(mis, wxBITMAP_TYPE_PNG);
+        s_bm = wxBitmap(img.IsOk() ? img : wxImage(32, 32));
+    }
+    return &s_bm;
+}
+
+// ---------------------------------------------------------------------------
 // Descriptions
 // ---------------------------------------------------------------------------
 wxString stlaurent_pi::GetCommonName() {

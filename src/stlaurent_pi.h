@@ -28,6 +28,7 @@ public:
     int      GetAPIVersionMinor() override { return MY_API_VERSION_MINOR; }
     int      GetPlugInVersionMajor() override { return PLUGIN_VERSION_MAJOR; }
     int      GetPlugInVersionMinor() override { return PLUGIN_VERSION_MINOR; }
+    wxBitmap* GetPlugInBitmap() override;     // icône dans le gestionnaire de plugins
     wxString GetCommonName() override;       // nom affiché dans le gestionnaire
     wxString GetShortDescription() override; // description courte
     wxString GetLongDescription() override;  // description longue
