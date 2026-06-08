@@ -90,9 +90,8 @@ jobs:
             7z x "$env:TEMP\$f" -oC:\wxWidgets -y | Out-Null
           }
 
-      # eccodes refuse de se compiler pour x86 via vcpkg (check 64-bit dans
-      # CMakeLists.txt). On compile depuis les sources en patchant ce check.
-      # zlib (dépendance d'eccodes) via vcpkg x86 ; eccodes lui-même : sources.
+      # eccodes v2.24.0 supporte x86 nativement (avant le drop officiel 32-bit).
+      # On compile depuis les sources ; zlib (dépendance) via vcpkg x86.
       - name: Cache vcpkg zlib x86 (Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@v4
@@ -110,7 +109,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\eccodes-x86
-          key: eccodes-2.36.0-x86-win
+          key: eccodes-2.24.0-x86-win
 
       - name: Build eccodes x86 depuis sources (Windows)
         if: runner.os == 'Windows'
@@ -119,14 +118,8 @@ jobs:
           if (Test-Path "C:\eccodes-x86\bin\eccodes.dll") {
             Write-Host "eccodes en cache."; exit 0
           }
-          git clone --depth 1 --branch 2.36.0 https://github.com/ecmwf/eccodes.git eccodes-src
-          # Supprimer le bloc if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8) qui bloque x86
-          $c = Get-Content "eccodes-src/CMakeLists.txt" -Raw
-          $c = [regex]::Replace($c,
-            '(?s)if\s*\(\s*NOT\s+\$\{CMAKE_SIZEOF_VOID_P\}\s+EQUAL\s+8\s*\).*?endif\s*\(\)',
-            '')
-          Set-Content "eccodes-src/CMakeLists.txt" $c
-          Write-Host "Patch 64-bit check applique"
+          git clone --depth 1 --branch 2.24.0 https://github.com/ecmwf/eccodes.git eccodes-src
+          # v2.24.0 supporte x86 nativement (avant le drop officiel 32-bit)
           cmake -S eccodes-src -B eccodes-src/build -A Win32 `
             -DCMAKE_BUILD_TYPE=Release `
             -DENABLE_MEMFS=ON `
