@@ -164,11 +164,17 @@ jobs:
           cmake --install build --config Release --prefix $env:TEMP\pkg
 
           # Copier les DLLs runtime de vcpkg dans plugins/
-          # wx* est exclu : fourni par OpenCPN lui-même
+          # Exclusions :
+          #   wx*          : fourni par OpenCPN lui-même
+          #   libcrypto-3, libcurl, liblzma, libssl-3 : importés directement
+          #                  par opencpn.exe et pré-chargés avant tout plugin ;
+          #                  fournir nos copies provoquerait un conflit de version
+          #                  (Windows réutilise la version déjà en mémoire) → erreur 127
           $vcpkgBin = "C:\vcpkg\installed\x86-windows\bin"
           $dest = "$env:TEMP\pkg\plugins"
           Get-ChildItem "$vcpkgBin\*.dll" |
-            Where-Object { $_.Name -notmatch "^wx" } |
+            Where-Object { $_.Name -notmatch "^wx" -and
+                           $_.Name -notmatch "^(libcrypto|libcurl|liblzma|libssl)" } |
             ForEach-Object { Copy-Item $_.FullName $dest }
 
           Compress-Archive -Path "$env:TEMP\pkg\*" -DestinationPath $TARBALL
