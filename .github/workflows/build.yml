@@ -91,12 +91,30 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\vcpkg\installed
-          key: vcpkg-gdal-x86-${{ hashFiles('.github/workflows/build.yml') }}
-          restore-keys: vcpkg-gdal-x86-
+          key: vcpkg-gdal-x86-ocpn-${{ hashFiles('.github/workflows/build.yml') }}
+          restore-keys: vcpkg-gdal-x86-ocpn-
 
       - name: GDAL x86 via vcpkg (Windows)
         if: runner.os == 'Windows'
-        run: vcpkg install gdal:x86-windows
+        shell: pwsh
+        run: |
+          # Triplet personnalisé : openssl, curl et liblzma sont compilés en
+          # bibliothèques statiques plutôt qu'en DLLs. Ils s'intègrent dans
+          # gdal.dll à l'édition de liens, ce qui supprime libcrypto-3.dll,
+          # libssl-3.dll, libcurl.dll et liblzma.dll du package.
+          # Sans ces DLLs, le conflit de version avec celles pré-chargées par
+          # opencpn.exe (même nom, API différente → erreur 127) disparaît.
+          @(
+            'set(VCPKG_TARGET_ARCHITECTURE x86)',
+            'set(VCPKG_CRT_LINKAGE dynamic)',
+            'if(PORT MATCHES "^(openssl|curl|liblzma)$")',
+            '    set(VCPKG_LIBRARY_LINKAGE static)',
+            'else()',
+            '    set(VCPKG_LIBRARY_LINKAGE dynamic)',
+            'endif()'
+          ) | Set-Content "C:\vcpkg\triplets\community\x86-windows-ocpn.cmake"
+
+          vcpkg install gdal:x86-windows-ocpn
 
       # -----------------------------------------------------------------------
       # Configuration CMake
@@ -112,7 +130,7 @@ jobs:
             -DwxWidgets_ROOT_DIR="C:\wxWidgets" `
             -DwxWidgets_LIB_DIR="C:\wxWidgets\lib\vc14x_dll" `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x86-windows
+            -DVCPKG_TARGET_TRIPLET=x86-windows-ocpn
 
       # -----------------------------------------------------------------------
       # Compilation
@@ -170,7 +188,11 @@ jobs:
           #                  par opencpn.exe et pré-chargés avant tout plugin ;
           #                  fournir nos copies provoquerait un conflit de version
           #                  (Windows réutilise la version déjà en mémoire) → erreur 127
-          $vcpkgBin = "C:\vcpkg\installed\x86-windows\bin"
+          # Avec le triplet x86-windows-ocpn, openssl/curl/liblzma sont
+          # statiques → libcrypto-3.dll, libssl-3.dll, libcurl.dll, liblzma.dll
+          # n'existent plus dans le répertoire bin. L'exclusion explicite de ces
+          # noms est conservée à titre de filet de sécurité.
+          $vcpkgBin = "C:\vcpkg\installed\x86-windows-ocpn\bin"
           $dest = "$env:TEMP\pkg\plugins"
           Get-ChildItem "$vcpkgBin\*.dll" |
             Where-Object { $_.Name -notmatch "^wx" -and
