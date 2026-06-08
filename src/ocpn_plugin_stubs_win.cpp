@@ -152,29 +152,66 @@ void opencpn_plugin_116::PrepareContextMenu(int)                         {}
 // ============================================================
 // Fonctions C de l'API OpenCPN utilisées par notre code
 //
-// Ces stubs permettent à la DLL de se lier et de charger.
-// Sans opencpn.lib, ils remplacent les vraies implémentations.
-// Les retours sont des valeurs sûres/neutres.
+// Sans opencpn.lib, on résout les vraies implémentations à l'exécution
+// via GetProcAddress sur le module hôte (opencpn.exe).
+// GetModuleHandle(NULL) retourne l'EXE hôte depuis n'importe quelle DLL
+// chargée dans son processus ; opencpn.exe exporte ces fonctions avec
+// __declspec(dllexport) (via DECL_EXP).
 // ============================================================
+
+#include <windows.h>
+
+static HMODULE ocpn_exe() {
+    static HMODULE h = GetModuleHandle(NULL);
+    return h;
+}
+
 extern "C" {
 
 wxWindow* GetOCPNCanvasWindow() {
-    return nullptr;
+    using Fn = wxWindow*(*)();
+    static Fn f = reinterpret_cast<Fn>(
+        GetProcAddress(ocpn_exe(), "GetOCPNCanvasWindow"));
+    return f ? f() : nullptr;
 }
 
-int InsertPlugInTool(wxString, wxBitmap*, wxBitmap*, wxItemKind,
-                     wxString, wxString, wxObject*, int, int, opencpn_plugin*) {
-    return -1;
+int InsertPlugInTool(wxString label, wxBitmap* bm, wxBitmap* bmr,
+                     wxItemKind kind, wxString help, wxString longHelp,
+                     wxObject* data, int pos, int state, opencpn_plugin* pp) {
+    using Fn = int(*)(wxString, wxBitmap*, wxBitmap*, wxItemKind,
+                      wxString, wxString, wxObject*, int, int, opencpn_plugin*);
+    static Fn f = reinterpret_cast<Fn>(
+        GetProcAddress(ocpn_exe(), "InsertPlugInTool"));
+    return f ? f(label, bm, bmr, kind, help, longHelp, data, pos, state, pp) : -1;
 }
 
-void RemovePlugInTool(int) {}
+void RemovePlugInTool(int id) {
+    using Fn = void(*)(int);
+    static Fn f = reinterpret_cast<Fn>(
+        GetProcAddress(ocpn_exe(), "RemovePlugInTool"));
+    if (f) f(id);
+}
 
-void SetToolbarItemState(int, bool) {}
+void SetToolbarItemState(int id, bool state) {
+    using Fn = void(*)(int, bool);
+    static Fn f = reinterpret_cast<Fn>(
+        GetProcAddress(ocpn_exe(), "SetToolbarItemState"));
+    if (f) f(id, state);
+}
 
-void RequestRefresh(wxWindow*) {}
+void RequestRefresh(wxWindow* win) {
+    using Fn = void(*)(wxWindow*);
+    static Fn f = reinterpret_cast<Fn>(
+        GetProcAddress(ocpn_exe(), "RequestRefresh"));
+    if (f) f(win);
+}
 
-void GetCanvasPixLL(PlugIn_ViewPort*, wxPoint* pp, double, double) {
-    if (pp) { pp->x = 0; pp->y = 0; }
+void GetCanvasPixLL(PlugIn_ViewPort* vp, wxPoint* pp, double lat, double lon) {
+    using Fn = void(*)(PlugIn_ViewPort*, wxPoint*, double, double);
+    static Fn f = reinterpret_cast<Fn>(
+        GetProcAddress(ocpn_exe(), "GetCanvasPixLL"));
+    if (f) f(vp, pp, lat, lon);
+    else if (pp) { pp->x = 0; pp->y = 0; }
 }
 
 } // extern "C"
