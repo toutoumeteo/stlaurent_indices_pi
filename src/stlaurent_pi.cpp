@@ -14,6 +14,9 @@
 // Points d'entrée OpenCPN
 // ---------------------------------------------------------------------------
 extern "C" {
+    DECL_EXP int GetABI_VersionMajor() { return stlaurent_pi::MY_API_VERSION_MAJOR; }
+    DECL_EXP int GetABI_VersionMinor() { return stlaurent_pi::MY_API_VERSION_MINOR; }
+
     DECL_EXP opencpn_plugin* create_pi(void* ppimgr) {
         return new stlaurent_pi(ppimgr);
     }

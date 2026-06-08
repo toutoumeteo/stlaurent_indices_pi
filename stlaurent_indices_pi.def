@@ -6,3 +6,5 @@ LIBRARY stlaurent_indices_pi
 EXPORTS
     create_pi
     destroy_pi
+    GetABI_VersionMajor
+    GetABI_VersionMinor

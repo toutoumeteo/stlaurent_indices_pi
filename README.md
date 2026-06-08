@@ -1,15 +1,15 @@
 # stlaurent_indices_pi
 
-Plugin [OpenCPN](https://opencpn.org) pour l'affichage des indices météo-marins du Saint-Laurent produits par [Environnement et Changement climatique Canada (ECCC)](https://meteo.gc.ca).
+Plugin [OpenCPN](https://opencpn.org) pour l'affichage des indices météo-marins du Saint-Laurent produits par  [iMeteo.ca](https://imeteo.ca) à partir de fichiers GRIB et NetCDF d'[Environnement et Changement climatique Canada (ECCC)](https://meteo.gc.ca).
 
 ---
 
 ## Fonctionnalités
 
-- Lecture des fichiers GRIB2 issus du modèle **RDWPS** (Regional Deterministic Wave Prediction System)
+- Lecture des fichiers GRIB2
 - Affichage d'une **carte de couleurs** superposée à la carte nautique (palette bleu → vert → rouge)
 - Affichage de **flèches de direction** proportionnelles à la résolution d'affichage
-- Navigation entre les **48 pas de temps** d'une run (1h à 48h)
+- Navigation entre les **pas de temps** d'une run, par exemple 1h à 48h
 - Rendu OpenGL accéléré + fallback non-GL
 
 ### Indices supportés
