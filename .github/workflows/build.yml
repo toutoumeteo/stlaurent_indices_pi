@@ -90,17 +90,56 @@ jobs:
             7z x "$env:TEMP\$f" -oC:\wxWidgets -y | Out-Null
           }
 
-      - name: Cache vcpkg (Windows)
+      # eccodes refuse de se compiler pour x86 via vcpkg (check 64-bit dans
+      # CMakeLists.txt). On compile depuis les sources en patchant ce check.
+      # zlib (dépendance d'eccodes) via vcpkg x86 ; eccodes lui-même : sources.
+      - name: Cache vcpkg zlib x86 (Windows)
         if: runner.os == 'Windows'
         uses: actions/cache@v4
         with:
           path: C:\Users\runneradmin\AppData\Local\vcpkg\archives
-          key: vcpkg-eccodes-${{ hashFiles('.github/workflows/build.yml') }}
-          restore-keys: vcpkg-eccodes-
+          key: vcpkg-zlib-x86
+          restore-keys: vcpkg-zlib-
 
-      - name: eccodes (Windows)
+      - name: zlib x86 pour eccodes (Windows)
         if: runner.os == 'Windows'
-        run: vcpkg install eccodes:x86-windows --allow-unsupported
+        run: vcpkg install zlib:x86-windows
+
+      - name: Cache eccodes x86 (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: C:\eccodes-x86
+          key: eccodes-2.36.0-x86-win
+
+      - name: Build eccodes x86 depuis sources (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (Test-Path "C:\eccodes-x86\bin\eccodes.dll") {
+            Write-Host "eccodes en cache."; exit 0
+          }
+          git clone --depth 1 --branch 2.36.0 https://github.com/ecmwf/eccodes.git eccodes-src
+          # Supprimer le bloc if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8) qui bloque x86
+          $c = Get-Content "eccodes-src/CMakeLists.txt" -Raw
+          $c = [regex]::Replace($c,
+            '(?s)if\s*\(\s*NOT\s+\$\{CMAKE_SIZEOF_VOID_P\}\s+EQUAL\s+8\s*\).*?endif\s*\(\)',
+            '')
+          Set-Content "eccodes-src/CMakeLists.txt" $c
+          Write-Host "Patch 64-bit check applique"
+          cmake -S eccodes-src -B eccodes-src/build -A Win32 `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DENABLE_MEMFS=ON `
+            -DENABLE_FORTRAN=OFF `
+            -DENABLE_PYTHON=OFF `
+            -DENABLE_AEC=OFF `
+            -DENABLE_JPG=OFF `
+            -DENABLE_ECCODES_OMP_LOCKS=OFF `
+            -DENABLE_EXTRA_TESTS=OFF `
+            -DZLIB_ROOT="C:\vcpkg\installed\x86-windows" `
+            -DCMAKE_INSTALL_PREFIX=C:\eccodes-x86
+          cmake --build eccodes-src/build --config Release --parallel
+          cmake --install eccodes-src/build --config Release
 
       # -----------------------------------------------------------------------
       # Configuration CMake
@@ -115,8 +154,7 @@ jobs:
           cmake -B build -DCMAKE_BUILD_TYPE=Release -A Win32 `
             -DwxWidgets_ROOT_DIR="C:\wxWidgets" `
             -DwxWidgets_LIB_DIR="C:\wxWidgets\lib\vc14x_dll" `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x86-windows
+            -DCMAKE_PREFIX_PATH="C:\eccodes-x86"
 
       # -----------------------------------------------------------------------
       # Compilation
@@ -169,11 +207,11 @@ jobs:
 
           # Copier les DLLs runtime de vcpkg dans plugins/
           # wx* est exclu : fourni par OpenCPN lui-même
-          $vcpkgBin = "C:\vcpkg\installed\x86-windows\bin"
+          # DLLs eccodes (x86) + zlib (dépendance d'eccodes)
           $dest = "$env:TEMP\pkg\plugins"
-          Get-ChildItem "$vcpkgBin\*.dll" |
-            Where-Object { $_.Name -notmatch "^wx" } |
+          Get-ChildItem "C:\eccodes-x86\bin\*.dll" |
             ForEach-Object { Copy-Item $_.FullName $dest }
+          Copy-Item "C:\vcpkg\installed\x86-windows\bin\zlib1.dll" $dest -ErrorAction SilentlyContinue
 
           Compress-Archive -Path "$env:TEMP\pkg\*" -DestinationPath $TARBALL
           $SHA256 = (Get-FileHash $TARBALL -Algorithm SHA256).Hash.ToLower()
