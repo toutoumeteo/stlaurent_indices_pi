@@ -119,7 +119,9 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
 
     if (!m_textureValid)    BuildTexture();
     if (!m_textureId)       return true;
-    if (m_showLegend && !m_legendTexValid) BuildLegendTexture();
+    // BuildLegendTexture disabled: wxBitmap+wxMemoryDC inside WGL callback
+    // crashes on Windows — legend rewrite needed (raw GL, no GDI)
+    // if (m_showLegend && !m_legendTexValid) BuildLegendTexture();
 
     ensureGLUseProgram();
     GLint saved_program = 0;
@@ -143,7 +145,7 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
         DrawArrows(vp);
     }
 
-    if (m_showLegend) DrawLegend(vp);
+    // if (m_showLegend) DrawLegend(vp);  // disabled pending legend rewrite
 
     glMatrixMode(GL_PROJECTION); glPopMatrix();
     glMatrixMode(GL_MODELVIEW);  glPopMatrix();
