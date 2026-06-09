@@ -155,6 +155,13 @@ endif()
 # une différence entraîne "Incompatible plugin detected".
 if(UNIX AND NOT APPLE)
     target_link_options(stlaurent_indices_pi PRIVATE "-Wl,--hash-style=sysv")
+
+    # RPATH $ORIGIN : à l'installation, le plugin cherche ses dépendances
+    # bundlées dans son propre répertoire (lib/opencpn/).
+    # Nécessaire car le PPA OpenCPN ne dépend pas de libgdal — l'utilisateur
+    # n'aurait donc pas libgdal.so.34 sans action manuelle.
+    set_target_properties(stlaurent_indices_pi PROPERTIES
+        INSTALL_RPATH "$ORIGIN")
 endif()
 
 # ---------------------------------------------------------------------------

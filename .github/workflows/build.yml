@@ -186,6 +186,41 @@ jobs:
           # appose une signature locale acceptée par macOS pour les plugins
           # chargés par une app tierce (OpenCPN).
           # ---------------------------------------------------------------
+          # ---------------------------------------------------------------
+          # Linux : bundler libgdal et ses dépendances non-système.
+          # Le PPA OpenCPN ne dépend pas de libgdal → absent sur une install
+          # fraîche. On copie récursivement toutes les libs non-système dans
+          # lib/opencpn/ et on fixe leur RPATH à $ORIGIN.
+          # Libs exclues (toujours présentes avec OpenCPN) : libc/libm/libdl,
+          # libstdc++, libgcc_s, libwx*, libGL*.
+          # ---------------------------------------------------------------
+          if [[ "$(uname)" == "Linux" ]]; then
+            PLUGIN_DIR="${PKG}/lib/opencpn"
+            PLUGIN="${PLUGIN_DIR}/libstlaurent_indices_pi.so"
+            sudo apt-get install -y patchelf
+
+            SKIP_RE="(^/lib/)|(^/lib64/)|(libstdc\+\+)|(libgcc_s)|(libwx)|(libGL)|(libEGL)"
+
+            bundle() {
+              local bin="$1"
+              while IFS= read -r line; do
+                local path
+                path=$(awk '/=>/ && $3~/^\// {print $3}' <<< "$line")
+                [[ -z "$path" ]] && continue
+                [[ "$path" =~ $SKIP_RE ]] && continue
+                local name dest
+                name=$(basename "$path")
+                dest="${PLUGIN_DIR}/${name}"
+                [[ -f "$dest" ]] && continue
+                cp "$path" "$dest"
+                patchelf --set-rpath '$ORIGIN' "$dest" 2>/dev/null || true
+                bundle "$dest"
+              done < <(ldd "$bin" 2>/dev/null)
+            }
+
+            bundle "$PLUGIN"
+          fi
+
           if [[ "$(uname)" == "Darwin" ]]; then
             PLUGIN="$PKG/PlugIns/libstlaurent_indices_pi.dylib"
             brew install dylibbundler
