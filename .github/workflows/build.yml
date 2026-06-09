@@ -161,6 +161,35 @@ jobs:
           TARBALL="stlaurent_indices_pi-${VERSION}-${{ matrix.tarball_suffix }}.tar.gz"
 
           cmake --install build --prefix /tmp/pkg
+
+          # ---------------------------------------------------------------
+          # macOS : bundler GDAL et ses dépendances transitives (proj, geos,
+          # sqlite, …) pour un plugin autonome, sans Homebrew sur la machine
+          # de l'utilisateur final.
+          #
+          # dylibbundler :
+          #   1. Scanne le plugin et copie chaque dylib non-système dans PlugIns/
+          #   2. Corrige récursivement les chemins absolus en @loader_path/<nom>
+          #   3. macOS cherche ensuite les dylibs dans le même dossier que le
+          #      plugin → aucune dépendance externe requise chez l'utilisateur.
+          #
+          # Les dylibs wxWidgets (déjà en @executable_path dans le bundle
+          # OpenCPN) et les libs système (/usr/lib) sont laissées intactes.
+          #
+          # Re-signature ad-hoc : dylibbundler invalide les signatures Apple
+          # existantes en modifiant les load commands ; codesign --sign -
+          # appose une signature locale acceptée par macOS pour les plugins
+          # chargés par une app tierce (OpenCPN).
+          # ---------------------------------------------------------------
+          if [[ "$(uname)" == "Darwin" ]]; then
+            PLUGIN=/tmp/pkg/PlugIns/libstlaurent_indices_pi.dylib
+            brew install dylibbundler
+            dylibbundler -od -b -x "$PLUGIN" -d /tmp/pkg/PlugIns/ -p @loader_path/
+            for f in /tmp/pkg/PlugIns/*.dylib; do
+              codesign --force --sign - "$f" || true
+            done
+          fi
+
           cd /tmp/pkg && tar czf "$GITHUB_WORKSPACE/$TARBALL" .
           cd "$GITHUB_WORKSPACE"
 
