@@ -189,7 +189,17 @@ jobs:
           if [[ "$(uname)" == "Darwin" ]]; then
             PLUGIN="$PKG/PlugIns/libstlaurent_indices_pi.dylib"
             brew install dylibbundler
-            dylibbundler -od -b -x "$PLUGIN" -d "$PKG/PlugIns/" -p @loader_path/
+
+            # dylibbundler échoue quand le binaire principal (-x) est dans le
+            # même dossier que la destination (-d) : il le traite comme une
+            # dépendance à copier, le déplace, puis ne le trouve plus pour le
+            # chmod final. Contournement : passer une copie temporaire hors de
+            # PlugIns/, puis écraser l'original avec la version corrigée.
+            PLUGIN_TMP="${RUNNER_TEMP}/stlaurent_tmp.dylib"
+            cp "$PLUGIN" "$PLUGIN_TMP"
+            dylibbundler -od -b -x "$PLUGIN_TMP" -d "$PKG/PlugIns/" -p @loader_path/
+            cp "$PLUGIN_TMP" "$PLUGIN"
+
             for f in "$PKG/PlugIns/"*.dylib; do
               codesign --force --sign - "$f" || true
             done
