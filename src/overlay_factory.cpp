@@ -119,9 +119,11 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
 
     if (!m_textureValid)    BuildTexture();
     if (!m_textureId)       return true;
-    // BuildLegendTexture disabled: wxBitmap+wxMemoryDC inside WGL callback
-    // crashes on Windows — legend rewrite needed (raw GL, no GDI)
-    // if (m_showLegend && !m_legendTexValid) BuildLegendTexture();
+    // Sur Windows, wxBitmap+wxMemoryDC dans un callback WGL (GDI + OpenGL
+    // simultanés) provoque un crash. Sur macOS et Linux, pas de restriction.
+#ifndef _WIN32
+    if (m_showLegend && !m_legendTexValid) BuildLegendTexture();
+#endif
 
     ensureGLUseProgram();
     GLint saved_program = 0;
@@ -145,7 +147,9 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
         DrawArrows(vp);
     }
 
-    // if (m_showLegend) DrawLegend(vp);  // disabled pending legend rewrite
+#ifndef _WIN32
+    if (m_showLegend) DrawLegend(vp);
+#endif
 
     glMatrixMode(GL_PROJECTION); glPopMatrix();
     glMatrixMode(GL_MODELVIEW);  glPopMatrix();
