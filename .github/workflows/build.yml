@@ -160,7 +160,12 @@ jobs:
           VERSION="${VERSION#v}"   # retirer le "v" : v1.0.0 → 1.0.0
           TARBALL="stlaurent_indices_pi-${VERSION}-${{ matrix.tarball_suffix }}.tar.gz"
 
-          cmake --install build --prefix /tmp/pkg
+          # Sur macOS, /tmp est un symlink → /private/tmp.
+          # Certaines versions de dylibbundler ne résolvent pas ce symlink
+          # correctement lors du chmod interne → "No such file or directory".
+          # $RUNNER_TEMP est un chemin réel sans symlink sur tous les runners.
+          PKG="${RUNNER_TEMP}/pkg"
+          cmake --install build --prefix "$PKG"
 
           # ---------------------------------------------------------------
           # macOS : bundler GDAL et ses dépendances transitives (proj, geos,
@@ -182,15 +187,15 @@ jobs:
           # chargés par une app tierce (OpenCPN).
           # ---------------------------------------------------------------
           if [[ "$(uname)" == "Darwin" ]]; then
-            PLUGIN=/tmp/pkg/PlugIns/libstlaurent_indices_pi.dylib
+            PLUGIN="$PKG/PlugIns/libstlaurent_indices_pi.dylib"
             brew install dylibbundler
-            dylibbundler -od -b -x "$PLUGIN" -d /tmp/pkg/PlugIns/ -p @loader_path/
-            for f in /tmp/pkg/PlugIns/*.dylib; do
+            dylibbundler -od -b -x "$PLUGIN" -d "$PKG/PlugIns/" -p @loader_path/
+            for f in "$PKG/PlugIns/"*.dylib; do
               codesign --force --sign - "$f" || true
             done
           fi
 
-          cd /tmp/pkg && tar czf "$GITHUB_WORKSPACE/$TARBALL" .
+          cd "$PKG" && tar czf "$GITHUB_WORKSPACE/$TARBALL" .
           cd "$GITHUB_WORKSPACE"
 
           if command -v sha256sum >/dev/null; then
