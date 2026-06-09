@@ -40,9 +40,10 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
     wxBoxSizer* row;
 
     // --- Bouton ouvrir ---
-    m_btnOpen = new wxButton(this, wxID_OPEN, _("Choisir fichier(s) GRIB…"));
-    m_btnOpen->SetToolTip(_("Sélectionner un ou plusieurs fichiers GRIB2.\n"
-                            "Les records non pertinents sont ignorés."));
+    m_btnOpen = new wxButton(this, wxID_OPEN, wxString::FromUTF8("Choisir fichier(s) GRIB\xe2\x80\xa6"));
+    m_btnOpen->SetToolTip(wxString::FromUTF8(
+        "S\xc3\xa9lectionner un ou plusieurs fichiers GRIB2.\n"
+        "Les records non pertinents sont ignor\xc3\xa9s."));
     mainSizer->Add(m_btnOpen, 0, wxALL | wxEXPAND, 6);
 
     // --- Séparateur ---
@@ -58,7 +59,7 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
     mainSizer->Add(indiceBox, 0, wxALL | wxEXPAND, 6);
 
     // --- Options d'affichage ---
-    m_chkLegend = new wxCheckBox(this, ID_CHK_LEGEND, _("Afficher la légende"));
+    m_chkLegend = new wxCheckBox(this, ID_CHK_LEGEND, wxString::FromUTF8("Afficher la l\xc3\xa9gende"));
     m_chkLegend->SetValue(true);
     mainSizer->Add(m_chkLegend, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
@@ -74,7 +75,7 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
     mainSizer->Add(row, 0, wxALL | wxEXPAND, 6);
 
     // --- Label heure courante ---
-    m_lblTime = new wxStaticText(this, wxID_ANY, _("—"),
+    m_lblTime = new wxStaticText(this, wxID_ANY, wxString::FromUTF8("\xe2\x80\x94"),
                                   wxDefaultPosition, wxDefaultSize,
                                   wxALIGN_CENTRE_HORIZONTAL);
     mainSizer->Add(m_lblTime, 0, wxALL | wxEXPAND, 4);
@@ -84,7 +85,7 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
 
     // --- Barre de statut ---
     m_lblStatus = new wxStaticText(this, wxID_ANY,
-                                    _("Aucune donnée chargée."),
+                                    wxString::FromUTF8("Aucune donn\xc3\xa9e charg\xc3\xa9e."),
                                     wxDefaultPosition, wxDefaultSize,
                                     wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
     wxFont font = m_lblStatus->GetFont();
@@ -158,7 +159,7 @@ void StLaurentDialog::RefreshAfterLoad() {
 
         // Label de valeur : largeur fixe, aligné à droite
         // Monospace pour que les chiffres ne bougent pas d'un rendu à l'autre
-        wxStaticText* lbl = new wxStaticText(cbParent, wxID_ANY, wxT("—"),
+        wxStaticText* lbl = new wxStaticText(cbParent, wxID_ANY, wxString::FromUTF8("\xe2\x80\x94"),
                                               wxDefaultPosition, wxSize(130, -1),
                                               wxALIGN_RIGHT | wxST_NO_AUTORESIZE);
         wxFont monoFont = lbl->GetFont();
@@ -187,9 +188,14 @@ void StLaurentDialog::RefreshAfterLoad() {
 
     UpdateTimeLabel();
 
+    int nDir = (int)data[0].directionSteps.size();
     wxString msg;
-    msg.Printf(_("%d indice(s) chargé(s), %d pas de temps."),
-               (int)data.size(), (int)data[0].scalarSteps.size());
+    if (nDir > 0)
+        msg.Printf(wxString::FromUTF8("%d indice(s), %d pas de temps + direction."),
+                   (int)data.size(), (int)data[0].scalarSteps.size());
+    else
+        msg.Printf(wxString::FromUTF8("%d indice(s), %d pas de temps (sans direction)."),
+                   (int)data.size(), (int)data[0].scalarSteps.size());
     m_lblStatus->SetLabel(msg);
 
     Layout();
@@ -264,13 +270,13 @@ void StLaurentDialog::UpdateTimeLabel() {
     int step = m_plugin->GetCurrentStep();
 
     if (data.empty() || idx >= (int)data.size()) {
-        m_lblTime->SetLabel(_("—"));
+        m_lblTime->SetLabel(wxString::FromUTF8("\xe2\x80\x94"));
         return;
     }
 
     const auto& steps = data[idx].scalarSteps;
     if (step >= (int)steps.size()) {
-        m_lblTime->SetLabel(_("—"));
+        m_lblTime->SetLabel(wxString::FromUTF8("\xe2\x80\x94"));
         return;
     }
 
@@ -304,7 +310,7 @@ void StLaurentDialog::UpdateCursorDisplay(int dataIndex, double scalar,
 
     wxString text;
     if (!inGrid) {
-        text = wxT("—");
+        text = wxString::FromUTF8("\xe2\x80\x94");
     } else {
         const auto& data = m_plugin->GetLoadedData();
         wxString units = (dataIndex < (int)data.size())

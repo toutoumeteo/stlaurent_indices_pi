@@ -126,9 +126,10 @@ wxString stlaurent_pi::GetShortDescription() {
 }
 
 wxString stlaurent_pi::GetLongDescription() {
-    return _("Affichage des indices météo-marins pour le Saint-Laurent :\n"
-             "indice d'agitation, mer croisée, et autres indices\n"
-             "produits par Environnement et Changement climatique Canada.");
+    return wxString::FromUTF8(
+        "Affichage des indices m\xc3\xa9t\xc3\xa9o-marins pour le Saint-Laurent :\n"
+        "indice d'agitation, mer crois\xc3\xa9e, et autres indices\n"
+        "produits par Environnement et Changement climatique Canada.");
 }
 
 // ---------------------------------------------------------------------------

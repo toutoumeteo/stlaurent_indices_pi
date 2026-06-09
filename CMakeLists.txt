@@ -179,6 +179,11 @@ if(WIN32)
     # Fichier .def : liste explicite des exports du plugin
     target_sources(stlaurent_indices_pi PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/stlaurent_indices_pi.def)
+
+    # Forcer l'encodage UTF-8 pour les fichiers source et les littéraux
+    # de chaînes. Sans ce flag, MSVC utilise la codepage système (Windows-1252)
+    # ce qui corrompt les séquences UTF-8 dans les wxString::FromUTF8("...").
+    target_compile_options(stlaurent_indices_pi PRIVATE /utf-8)
 endif()
 
 # macOS
