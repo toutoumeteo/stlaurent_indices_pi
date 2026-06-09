@@ -199,6 +199,10 @@ jobs:
             PLUGIN="${PLUGIN_DIR}/libstlaurent_indices_pi.so"
             sudo apt-get install -y patchelf
 
+            # S'assurer que le plugin installé a bien RPATH=$ORIGIN,
+            # indépendamment de ce que cmake a réellement gravé.
+            patchelf --set-rpath '$ORIGIN' "$PLUGIN"
+
             SKIP_RE="(^/lib/)|(^/lib64/)|(libstdc\+\+)|(libgcc_s)|(libwx)|(libGL)|(libEGL)"
 
             bundle() {
@@ -212,13 +216,23 @@ jobs:
                 name=$(basename "$path")
                 dest="${PLUGIN_DIR}/${name}"
                 [[ -f "$dest" ]] && continue
+                echo "  bundle: $name"
                 cp "$path" "$dest"
                 patchelf --set-rpath '$ORIGIN' "$dest" 2>/dev/null || true
                 bundle "$dest"
               done < <(ldd "$bin" 2>/dev/null)
             }
 
-            bundle "$PLUGIN"
+            # Scanner les dépendances depuis l'artefact de BUILD (pas l'installé).
+            # cmake --install remplace le BUILD_RPATH par INSTALL_RPATH=$ORIGIN ;
+            # ldd sur l'installé peut alors afficher "libgdal => not found" si
+            # $ORIGIN (=PLUGIN_DIR) ne contient pas encore libgdal, alors que
+            # l'artefact de build conserve le BUILD_RPATH pointant directement
+            # vers /usr/lib/.../libgdal.so.34 → ldd trouve toujours la vraie lib.
+            echo "=== Bundling Linux deps ==="
+            bundle "build/libstlaurent_indices_pi.so"
+            echo "=== PLUGIN_DIR contents ==="
+            ls "$PLUGIN_DIR"
           fi
 
           if [[ "$(uname)" == "Darwin" ]]; then
