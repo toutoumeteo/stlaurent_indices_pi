@@ -91,8 +91,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: C:\vcpkg\installed
-          key: vcpkg-gdal-x86-ocpn-${{ hashFiles('.github/workflows/build.yml') }}
-          restore-keys: vcpkg-gdal-x86-ocpn-
+          key: vcpkg-gdal-x86-ocpn-v2-${{ hashFiles('.github/workflows/build.yml') }}
+          restore-keys: vcpkg-gdal-x86-ocpn-v2-
 
       - name: GDAL x86 via vcpkg (Windows)
         if: runner.os == 'Windows'
@@ -106,7 +106,7 @@ jobs:
           # opencpn.exe (même nom, API différente → erreur 127) disparaît.
           @(
             'set(VCPKG_TARGET_ARCHITECTURE x86)',
-            'set(VCPKG_CRT_LINKAGE dynamic)',
+            'set(VCPKG_CRT_LINKAGE static)',
             'if(PORT MATCHES "^(openssl|curl|liblzma)$")',
             '    set(VCPKG_LIBRARY_LINKAGE static)',
             'else()',
