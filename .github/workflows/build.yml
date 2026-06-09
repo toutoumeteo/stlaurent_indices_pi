@@ -197,41 +197,41 @@ jobs:
           if [[ "$(uname)" == "Linux" ]]; then
             PLUGIN_DIR="${PKG}/lib/opencpn"
             PLUGIN="${PLUGIN_DIR}/libstlaurent_indices_pi.so"
-            sudo apt-get install -y patchelf
+            sudo apt-get install -y patchelf binutils
 
-            # S'assurer que le plugin installé a bien RPATH=$ORIGIN,
-            # indépendamment de ce que cmake a réellement gravé.
+            # Garantir RPATH=$ORIGIN sur le plugin installé
             patchelf --set-rpath '$ORIGIN' "$PLUGIN"
 
-            SKIP_RE="(^/lib/)|(^/lib64/)|(libstdc\+\+)|(libgcc_s)|(libwx)|(libGL)|(libEGL)"
+            # Libs à ne PAS bundler : système de base ou fournies par OpenCPN.
+            # On exclut par nom de soname — plus fiable que par chemin
+            # (les chemins varient selon /lib vs /usr/lib sur les distros récentes).
+            SKIP_RE="^(ld-linux|libc\.so|libdl\.so|libm\.so|libpthread\.so|librt\.so|libutil\.so|libresolv\.so|libstdc\+\+|libgcc_s|libwx|libGL\.|libEGL\.)"
 
             bundle() {
               local bin="$1"
-              while IFS= read -r line; do
+              # readelf lit les NEEDED directement dans l'ELF — pas besoin que
+              # les libs soient accessibles (indépendant du RPATH courant).
+              # ldconfig -p cherche le chemin réel dans le cache système.
+              while IFS= read -r needed; do
+                [[ "$needed" =~ $SKIP_RE ]] && continue
                 local path
-                path=$(awk '/=>/ && $3~/^\// {print $3}' <<< "$line")
+                path=$(ldconfig -p | awk -v lib="$needed" '$1==lib{print $NF; exit}')
                 [[ -z "$path" ]] && continue
-                [[ "$path" =~ $SKIP_RE ]] && continue
-                local name dest
-                name=$(basename "$path")
-                dest="${PLUGIN_DIR}/${name}"
+                local dest="${PLUGIN_DIR}/$(basename "$path")"
                 [[ -f "$dest" ]] && continue
-                echo "  bundle: $name"
+                echo "  bundle: $(basename "$path")"
                 cp "$path" "$dest"
                 patchelf --set-rpath '$ORIGIN' "$dest" 2>/dev/null || true
                 bundle "$dest"
-              done < <(ldd "$bin" 2>/dev/null)
+              done < <(readelf -d "$bin" 2>/dev/null \
+                        | awk '/NEEDED/{gsub(/.*\[|\].*/,""); print}')
             }
 
-            # Scanner les dépendances depuis l'artefact de BUILD (pas l'installé).
-            # cmake --install remplace le BUILD_RPATH par INSTALL_RPATH=$ORIGIN ;
-            # ldd sur l'installé peut alors afficher "libgdal => not found" si
-            # $ORIGIN (=PLUGIN_DIR) ne contient pas encore libgdal, alors que
-            # l'artefact de build conserve le BUILD_RPATH pointant directement
-            # vers /usr/lib/.../libgdal.so.34 → ldd trouve toujours la vraie lib.
-            echo "=== Bundling Linux deps ==="
+            echo "=== readelf NEEDED (diagnostic) ==="
+            readelf -d "build/libstlaurent_indices_pi.so" | grep NEEDED || true
+            echo "=== Bundling ==="
             bundle "build/libstlaurent_indices_pi.so"
-            echo "=== PLUGIN_DIR contents ==="
+            echo "=== PLUGIN_DIR ==="
             ls "$PLUGIN_DIR"
           fi
 
