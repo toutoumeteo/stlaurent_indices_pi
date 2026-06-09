@@ -63,6 +63,7 @@ OverlayFactory::OverlayFactory()
     , m_legendTexValid(false)
     , m_legendTexW(0)
     , m_legendTexH(0)
+    , m_legendPixelsReady(false)
     , m_cursorInGrid(false)
     , m_cursorScalar(0.0)
     , m_cursorDir(-1.0)
@@ -82,7 +83,11 @@ void OverlayFactory::SetData(const IndexData* data, int stepIndex) {
     m_data      = data;
     m_stepIndex = stepIndex;
     InvalidateTexture();
-    m_legendTexValid = false;  // reconstruire la légende au prochain rendu
+    m_legendTexValid    = false;
+    m_legendPixelsReady = false;
+    // Construire les pixels de légende ICI, hors contexte GL.
+    // Sur Windows, wxBitmap ne peut pas être créé pendant un callback WGL.
+    if (m_data) BuildLegendPixels();
 }
 
 void OverlayFactory::InvalidateTexture() {
@@ -119,11 +124,11 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
 
     if (!m_textureValid)    BuildTexture();
     if (!m_textureId)       return true;
-    // Sur Windows, wxBitmap+wxMemoryDC dans un callback WGL (GDI + OpenGL
-    // simultanés) provoque un crash. Sur macOS et Linux, pas de restriction.
-#ifndef _WIN32
-    if (m_showLegend && !m_legendTexValid) BuildLegendTexture();
-#endif
+    // Phase 2 de la légende : upload en texture GL si les pixels sont prêts.
+    // Les pixels ont été construits dans SetData() (hors GL), ce qui évite
+    // le conflit GDI/WGL sur Windows.
+    if (m_showLegend && m_legendPixelsReady && !m_legendTexValid)
+        UploadLegendTexture();
 
     ensureGLUseProgram();
     GLint saved_program = 0;
@@ -147,9 +152,7 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
         DrawArrows(vp);
     }
 
-#ifndef _WIN32
     if (m_showLegend) DrawLegend(vp);
-#endif
 
     glMatrixMode(GL_PROJECTION); glPopMatrix();
     glMatrixMode(GL_MODELVIEW);  glPopMatrix();
@@ -369,22 +372,21 @@ void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
 }
 
 // ---------------------------------------------------------------------------
-// Construction de la texture légende via wxBitmap + wxMemoryDC
-// La légende est reconstruite uniquement quand l'indice change (SetData).
+// Phase 1 — construction des pixels de légende via wxBitmap + wxMemoryDC.
+// Appelée depuis SetData(), HORS de tout contexte GL.
+// Sur Windows, un wxBitmap créé pendant un callback WGL (GDI et OpenGL
+// simultanés) provoque un crash ; cette séparation l'évite sur toutes
+// les plateformes.
 // ---------------------------------------------------------------------------
-void OverlayFactory::BuildLegendTexture() {
+void OverlayFactory::BuildLegendPixels() {
     if (!m_data) return;
     const IndexDefinition& def = m_data->def;
 
-    // Facteur d'échelle HiDPI : sur écran Retina/4K, GetContentScaleFactor()
-    // renvoie ~2.0 → la légende garde une taille physique constante. Sur
-    // Windows et écran standard, il renvoie 1.0 (aucun changement).
     double scale = 1.0;
     if (wxWindow* cw = GetOCPNCanvasWindow())
         scale = std::max(1.0, std::min(4.0, (double)cw->GetContentScaleFactor()));
     auto S = [scale](int v) { return (int)std::lround(v * scale); };
 
-    // Dimensions de la légende en pixels (mises à l'échelle)
     const int W = S(210), H = S(65);
     m_legendTexW = W;
     m_legendTexH = H;
@@ -393,13 +395,11 @@ void OverlayFactory::BuildLegendTexture() {
     {
         wxMemoryDC dc(bmp);
 
-        // Fond sombre
         dc.SetBackground(wxBrush(wxColour(25, 25, 25)));
         dc.Clear();
 
         const int fontPt = S(8);
 
-        // Titre : "Indice d'agitation [-]"
         wxString title = wxString::FromUTF8(def.displayName.c_str())
                        + wxT(" [") + wxString::FromUTF8(def.units.c_str()) + wxT("]");
         dc.SetFont(wxFont(fontPt, wxFONTFAMILY_DEFAULT,
@@ -407,14 +407,11 @@ void OverlayFactory::BuildLegendTexture() {
         dc.SetTextForeground(wxColour(230, 230, 230));
         dc.DrawText(title, S(8), S(5));
 
-        // Barre de couleur — discrète si colorScale défini, sinon gradient
         const int barX = S(8), barY = S(23), barW = W - 2 * barX, barH = S(18);
         if (!def.colorScale.empty()) {
             int n = (int)def.colorScale.size();
             for (int k = 0; k < barW; ++k) {
-                // Position dans la barre → indice de niveau
-                int lvl = (int)(k * n / barW);
-                lvl = std::max(0, std::min(n - 1, lvl));
+                int lvl = std::max(0, std::min(n - 1, (int)(k * n / barW)));
                 auto& c = def.colorScale[lvl];
                 dc.SetPen(wxPen(wxColour(c.r, c.g, c.b)));
                 dc.DrawLine(barX + k, barY, barX + k, barY + barH);
@@ -422,7 +419,6 @@ void OverlayFactory::BuildLegendTexture() {
         } else {
             for (int x = 0; x < barW; ++x) {
                 float t = (float)x / (float)(barW - 1);
-                // Pour la légende du gradient on passe une valeur physique intermédiaire
                 float v = (float)(def.minValue + t * (def.maxValue - def.minValue));
                 unsigned char r, g, b, a;
                 ValueToRGBA(v, def, r, g, b, a);
@@ -430,12 +426,10 @@ void OverlayFactory::BuildLegendTexture() {
                 dc.DrawLine(barX + x, barY, barX + x, barY + barH);
             }
         }
-        // Bordure fine autour de la barre
         dc.SetPen(wxPen(wxColour(160, 160, 160)));
         dc.SetBrush(*wxTRANSPARENT_BRUSH);
         dc.DrawRectangle(barX, barY, barW, barH);
 
-        // Valeurs min et max sous la barre
         dc.SetFont(wxFont(fontPt, wxFONTFAMILY_DEFAULT,
                           wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
         dc.SetTextForeground(wxColour(200, 200, 200));
@@ -449,10 +443,21 @@ void OverlayFactory::BuildLegendTexture() {
 
     }  // dc libéré ici → SelectObject(wxNullBitmap) implicite
 
-    // wxImage : données RGB top-to-bottom (ligne 0 = haut de l'image)
-    // glTexImage2D interprète la ligne 0 comme le bas de la texture (v=0).
-    // → On dessine avec v=0 en haut de l'écran pour compenser (voir DrawLegend).
+    // Stocker les pixels RGB — wxImage ligne 0 = haut de l'image.
+    // glTexImage2D interprète ligne 0 = bas de la texture.
+    // DrawLegend() compense en assignant v=0 au coin haut de l'écran.
     wxImage img = bmp.ConvertToImage();
+    const unsigned char* rgb = img.GetData();
+    m_legendPixels.assign(rgb, rgb + (size_t)W * H * 3);
+    m_legendPixelsReady = true;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — upload des pixels pré-calculés vers une texture OpenGL.
+// Appelée depuis RenderGL(), dans le contexte GL actif.
+// ---------------------------------------------------------------------------
+void OverlayFactory::UploadLegendTexture() {
+    if (!m_legendPixelsReady || m_legendPixels.empty()) return;
 
     if (!m_legendTexId) glGenTextures(1, &m_legendTexId);
     glBindTexture(GL_TEXTURE_2D, m_legendTexId);
@@ -460,10 +465,9 @@ void OverlayFactory::BuildLegendTexture() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, W, H,
-                 0, GL_RGB, GL_UNSIGNED_BYTE, img.GetData());
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, m_legendTexW, m_legendTexH,
+                 0, GL_RGB, GL_UNSIGNED_BYTE, m_legendPixels.data());
     glBindTexture(GL_TEXTURE_2D, 0);
-
     m_legendTexValid = true;
 }
 

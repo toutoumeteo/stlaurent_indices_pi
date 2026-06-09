@@ -76,6 +76,13 @@ private:
     bool   m_legendTexValid;
     int    m_legendTexW;
     int    m_legendTexH;
+    // Pixels RGB pré-calculés hors contexte GL (wxBitmap+wxMemoryDC).
+    // Sur Windows, créer un wxBitmap pendant un callback WGL (GDI+GL simultanés)
+    // provoque un crash. Solution : deux phases séparées :
+    //   BuildLegendPixels()   — wxDC, appelé depuis SetData() hors GL
+    //   UploadLegendTexture() — glTexImage2D, appelé depuis RenderGL()
+    std::vector<unsigned char> m_legendPixels;
+    bool   m_legendPixelsReady;
 
     // --- Curseur : valeurs interpolées ---
     bool   m_cursorInGrid;    // curseur sur la grille ET valeur non-manquante
@@ -87,7 +94,8 @@ private:
 
     // --- Construction des textures ---
     void BuildTexture();
-    void BuildLegendTexture();   // crée la texture légende via wxBitmap
+    void BuildLegendPixels();    // phase 1 : wxBitmap → m_legendPixels (hors GL)
+    void UploadLegendTexture();  // phase 2 : m_legendPixels → GL texture (dans RenderGL)
 
     // Convertit une valeur physique en couleur RGBA.
     // Si def.colorScale est non vide → palette discrète par niveaux.
