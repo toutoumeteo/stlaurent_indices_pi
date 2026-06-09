@@ -164,7 +164,15 @@ bool OverlayFactory::RenderGL(PlugIn_ViewPort* vp) {
 }
 
 // ---------------------------------------------------------------------------
-// Rendu DC fallback (non-OpenGL) — très simplifié
+// Rendu DC fallback (non-OpenGL)
+//
+// Sur Windows, OpenCPN peut être configuré sans OpenGL (logiciel, VM sans GPU).
+// Dans ce cas, seul RenderOverlay (DC) est appelé — jamais RenderGLOverlay.
+// → Ce rendu doit produire un résultat acceptable : blocs pleins + flèches.
+//
+// Principe : calculer la taille pixel d'une maille à l'échelle courante,
+// dessiner un rectangle plein centré sur chaque point de grille sélectionné.
+// Les blocs se touchent exactement → remplissage solide à toute échelle.
 // ---------------------------------------------------------------------------
 bool OverlayFactory::RenderDC(wxDC& dc, PlugIn_ViewPort* vp) {
     if (!m_data || !m_data->isLoaded()) return false;
@@ -172,9 +180,23 @@ bool OverlayFactory::RenderDC(wxDC& dc, PlugIn_ViewPort* vp) {
 
     const GridInfo&  g  = m_data->grid;
     const TimeStep&  ts = m_data->scalarSteps[m_stepIndex];
+    if (!ts.matchesGrid(g)) return false;
 
-    // Sous-échantillonnage pour performances
-    int step = std::max(1, std::max(g.ni, g.nj) / 200);
+    // Taille pixel d'une maille (coin SW de la grille comme référence)
+    wxPoint p00, p10, p01;
+    GetCanvasPixLL(vp, &p00, g.lat(0), g.lon(0));
+    GetCanvasPixLL(vp, &p10, g.lat(0), g.lon(g.ni > 1 ? 1 : 0));
+    GetCanvasPixLL(vp, &p01, g.lat(g.nj > 1 ? 1 : 0), g.lon(0));
+    int cellW = std::max(1, std::abs(p10.x - p00.x));
+    int cellH = std::max(1, std::abs(p01.y - p00.y));
+
+    // Sous-échantillonnage : viser des blocs d'au moins 2 px de large pour
+    // qu'ils se touchent et forment un remplissage sans trous.
+    int step  = std::max(1, (int)std::ceil(2.0 / cellW));
+    int drawW = cellW * step;
+    int drawH = cellH * step;
+
+    dc.SetPen(*wxTRANSPARENT_PEN);
 
     for (int j = 0; j < g.nj; j += step) {
         for (int i = 0; i < g.ni; i += step) {
@@ -183,13 +205,20 @@ bool OverlayFactory::RenderDC(wxDC& dc, PlugIn_ViewPort* vp) {
 
             unsigned char r, gv, b, a;
             ValueToRGBA((float)v, m_data->def, r, gv, b, a);
+            if (a == 0) continue;
 
             wxPoint p;
             GetCanvasPixLL(vp, &p, g.lat(j), g.lon(i));
-            dc.SetPen(wxPen(wxColour(r, gv, b), 1));
-            dc.DrawPoint(p.x, p.y);
+            dc.SetBrush(wxBrush(wxColour(r, gv, b)));
+            dc.DrawRectangle(p.x - drawW / 2, p.y - drawH / 2, drawW, drawH);
         }
     }
+
+    if (m_data->hasDirection() &&
+        m_stepIndex < (int)m_data->directionSteps.size()) {
+        DrawArrowsDC(dc, vp);
+    }
+
     return true;
 }
 
@@ -279,6 +308,11 @@ void OverlayFactory::DrawTexture(PlugIn_ViewPort* vp) {
 
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, m_textureId);
+    // Ré-appliquer le filtre linéaire : les paramètres de la texture sont stockés
+    // dans l'objet GL, pas dans le push/pop d'attributs. Sur certains pilotes
+    // Windows (VM, logiciel), une autre partie du code pourrait les avoir modifiés.
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     // Forcer GL_MODULATE pour que glColor4f contrôle l'opacité correctement.
     // Certains plugins (ex: GRIB) laissent GL_TEXTURE_ENV_MODE à GL_REPLACE ou
     // GL_DECAL ce qui ignorerait notre couleur et afficherait la texture opaque.
@@ -554,6 +588,60 @@ void OverlayFactory::DrawArrows(PlugIn_ViewPort* vp) {
             // (convention météo, « from »). On ajoute 180° pour obtenir le sens
             // de propagation et pointer la flèche dans la bonne direction.
             DrawArrowGL((float)p.x, (float)p.y, (float)(dir_deg + 180.0), arrow_len);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Dessin des flèches de direction — rendu DC (non-OpenGL)
+// Même logique que DrawArrows() mais via wxDC::DrawLine.
+// ---------------------------------------------------------------------------
+void OverlayFactory::DrawArrowsDC(wxDC& dc, PlugIn_ViewPort* vp) {
+    const GridInfo& g   = m_data->grid;
+    const TimeStep& dir = m_data->directionSteps[m_stepIndex];
+    const TimeStep& sc  = m_data->scalarSteps[m_stepIndex];
+    if (!dir.matchesGrid(g) || !sc.matchesGrid(g)) return;
+
+    wxPoint p0, p1;
+    GetCanvasPixLL(vp, &p0, g.lat0, g.lon0);
+    GetCanvasPixLL(vp, &p1, g.lat0, g.lon0 + g.dlon);
+    float pix_per_cell = std::abs((float)(p1.x - p0.x));
+    if (pix_per_cell < 0.1f) pix_per_cell = 0.1f;
+
+    int   grid_step = std::max(1, (int)(30.0f / pix_per_cell));
+    float arrow_len = std::min(30.0f, grid_step * pix_per_cell * 0.8f);
+    if (arrow_len < 5.0f) return;
+
+    dc.SetPen(wxPen(wxColour(25, 25, 25), 1));
+
+    for (int j = grid_step / 2; j < g.nj; j += grid_step) {
+        for (int i = grid_step / 2; i < g.ni; i += grid_step) {
+            if (sc.isMissing(i, j, g)) continue;
+
+            double dir_deg = dir.get(i, j, g);
+            if (dir_deg >= TimeStep::MISSING_VALUE - 1.0) continue;
+
+            wxPoint p;
+            GetCanvasPixLL(vp, &p, g.lat(j), g.lon(i));
+
+            // Convention GRIB « from » + 180° → sens de propagation
+            float angle_rad = (float)((90.0 - (dir_deg + 180.0)) * M_PI / 180.0);
+            float dx = arrow_len * std::cos(angle_rad);
+            float dy = -arrow_len * std::sin(angle_rad);  // y écran inversé
+
+            int x0 = p.x, y0 = p.y;
+            int x1 = x0 + (int)dx, y1 = y0 + (int)dy;
+            dc.DrawLine(x0, y0, x1, y1);
+
+            float head = arrow_len * 0.35f;
+            float al = angle_rad + (float)(150.0 * M_PI / 180.0);
+            float ar = angle_rad - (float)(150.0 * M_PI / 180.0);
+            dc.DrawLine(x1, y1,
+                        x1 + (int)(head * std::cos(al)),
+                        y1 - (int)(head * std::sin(al)));
+            dc.DrawLine(x1, y1,
+                        x1 + (int)(head * std::cos(ar)),
+                        y1 - (int)(head * std::sin(ar)));
         }
     }
 }

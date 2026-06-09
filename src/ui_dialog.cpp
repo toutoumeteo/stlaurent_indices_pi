@@ -191,10 +191,12 @@ void StLaurentDialog::RefreshAfterLoad() {
     int nDir = (int)data[0].directionSteps.size();
     wxString msg;
     if (nDir > 0)
-        msg.Printf(wxString::FromUTF8("%d indice(s), %d pas de temps + direction."),
-                   (int)data.size(), (int)data[0].scalarSteps.size());
+        msg.Printf(wxString::FromUTF8("%d indice(s), %d pas de temps + direction (%d pas)."),
+                   (int)data.size(), (int)data[0].scalarSteps.size(), nDir);
     else
-        msg.Printf(wxString::FromUTF8("%d indice(s), %d pas de temps (sans direction)."),
+        msg.Printf(wxString::FromUTF8(
+                   "%d indice(s), %d pas de temps \xe2\x80\x94 sans fl\xc3\xa8" "ches "
+                   "(ajoutez le fichier Direction_agitation)."),
                    (int)data.size(), (int)data[0].scalarSteps.size());
     m_lblStatus->SetLabel(msg);
 

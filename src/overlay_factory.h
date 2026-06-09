@@ -105,7 +105,8 @@ private:
 
 
     // --- Rendu des flèches de direction ---
-    void DrawArrows(PlugIn_ViewPort* vp);
+    void DrawArrows(PlugIn_ViewPort* vp);       // OpenGL
+    void DrawArrowsDC(wxDC& dc, PlugIn_ViewPort* vp);  // DC fallback
 
     // Dessine une flèche à l'écran (OpenGL)
     // x,y : position pixel, dir_deg : direction en degrés (convention météo: vient de)
