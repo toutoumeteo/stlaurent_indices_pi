@@ -128,7 +128,7 @@ wxString stlaurent_pi::GetShortDescription() {
 wxString stlaurent_pi::GetLongDescription() {
     return wxString::FromUTF8(
         "Affichage des indices m\xc3\xa9t\xc3\xa9o-marins pour le Saint-Laurent :\n"
-        "indice d'agitation, mer crois\xc3\xa9e, et autres indices\n"
+        "indice d'agitation, mer crois\xc3\xa9" "e, et autres indices\n"
         "produits par Environnement et Changement climatique Canada.");
 }
 

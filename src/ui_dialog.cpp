@@ -43,7 +43,7 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
     m_btnOpen = new wxButton(this, wxID_OPEN, wxString::FromUTF8("Choisir fichier(s) GRIB\xe2\x80\xa6"));
     m_btnOpen->SetToolTip(wxString::FromUTF8(
         "S\xc3\xa9lectionner un ou plusieurs fichiers GRIB2.\n"
-        "Les records non pertinents sont ignor\xc3\xa9s."));
+        "Les records non pertinents sont ignor\xc3\xa9" "s."));
     mainSizer->Add(m_btnOpen, 0, wxALL | wxEXPAND, 6);
 
     // --- Séparateur ---
@@ -85,7 +85,7 @@ StLaurentDialog::StLaurentDialog(wxWindow* parent, stlaurent_pi* plugin)
 
     // --- Barre de statut ---
     m_lblStatus = new wxStaticText(this, wxID_ANY,
-                                    wxString::FromUTF8("Aucune donn\xc3\xa9e charg\xc3\xa9e."),
+                                    wxString::FromUTF8("Aucune donn\xc3\xa9" "e charg\xc3\xa9" "e."),
                                     wxDefaultPosition, wxDefaultSize,
                                     wxALIGN_CENTRE_HORIZONTAL | wxST_NO_AUTORESIZE);
     wxFont font = m_lblStatus->GetFont();
