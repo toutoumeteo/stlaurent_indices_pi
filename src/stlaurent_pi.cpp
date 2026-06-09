@@ -204,9 +204,10 @@ bool stlaurent_pi::LoadFiles(const wxArrayString& paths, wxString& errMsg) {
         return false;
     }
 
-    m_bOverlayVisible = true;  // auto-afficher le premier indice au chargement
+    // DIAG v1.1.a7: skip render to isolate crash (GDAL vs GL render path)
+    m_bOverlayVisible = false;
     UpdateOverlay();
-    RequestRefresh();
+    // RequestRefresh();
     return true;
 }
 
