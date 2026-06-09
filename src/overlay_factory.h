@@ -81,8 +81,10 @@ private:
     // provoque un crash. Solution : deux phases séparées :
     //   BuildLegendPixels()   — wxDC, appelé depuis SetData() hors GL
     //   UploadLegendTexture() — glTexImage2D, appelé depuis RenderGL()
+    // m_legendBitmap est conservé pour le rendu DC (Windows sans OpenGL).
     std::vector<unsigned char> m_legendPixels;
-    bool   m_legendPixelsReady;
+    bool     m_legendPixelsReady;
+    wxBitmap m_legendBitmap;
 
     // --- Curseur : valeurs interpolées ---
     bool   m_cursorInGrid;    // curseur sur la grille ET valeur non-manquante

@@ -85,6 +85,7 @@ void OverlayFactory::SetData(const IndexData* data, int stepIndex) {
     InvalidateTexture();
     m_legendTexValid    = false;
     m_legendPixelsReady = false;
+    m_legendBitmap      = wxBitmap();
     // Construire les pixels de légende ICI, hors contexte GL.
     // Sur Windows, wxBitmap ne peut pas être créé pendant un callback WGL.
     if (m_data) BuildLegendPixels();
@@ -224,6 +225,13 @@ bool OverlayFactory::RenderDC(wxDC& dc, PlugIn_ViewPort* vp) {
     if (m_data->hasDirection() &&
         m_stepIndex < (int)m_data->directionSteps.size()) {
         DrawArrowsDC(dc, vp);
+    }
+
+    if (m_showLegend && m_legendBitmap.IsOk()) {
+        const int margin = 15;
+        int x = (vp->pix_width  - m_legendBitmap.GetWidth())  / 2;
+        int y =  vp->pix_height - margin - m_legendBitmap.GetHeight();
+        dc.DrawBitmap(m_legendBitmap, x, y, false);
     }
 
     return true;
@@ -442,6 +450,9 @@ void OverlayFactory::BuildLegendPixels() {
         dc.DrawText(maxStr, barX + barW - maxSz.x, textY);
 
     }  // dc libéré ici → SelectObject(wxNullBitmap) implicite
+
+    // Conserver le bitmap pour RenderDC (Windows sans OpenGL).
+    m_legendBitmap = bmp;
 
     // Stocker les pixels RGB — wxImage ligne 0 = haut de l'image.
     // glTexImage2D interprète ligne 0 = bas de la texture.
