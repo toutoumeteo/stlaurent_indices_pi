@@ -290,7 +290,7 @@ void StLaurentDialog::UpdateTimeLabel() {
     strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%MZ", tm_utc);
 
     wxString label;
-    label.Printf("H+%02d  —  %s", ts.stepHours, buf);
+    label.Printf(wxString::FromUTF8("H+%02d  \xe2\x80\x94  %s"), ts.stepHours, buf);
     m_lblTime->SetLabel(label);
 }
 
